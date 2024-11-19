@@ -1,0 +1,11 @@
+{
+    "test_project": {
+        "source": ["testproject.c"]
+    },
+    "threads": {
+        "source": ["threads.c"]
+    },
+    "user_signal": {
+        "source": ["user_signal.c"]
+    }
+}

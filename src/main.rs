@@ -1,19 +1,25 @@
 use clap::Parser;
-use std::path::PathBuf;
+use rustybug::{Args, DebuggerStateMachine, State};
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
 
-pub mod breakpoint;
-//pub mod test_loader;
-pub mod linux;
-pub mod ptrace_control;
+fn main() -> anyhow::Result<()> {
+    let fmt_layer = fmt::layer();
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
 
-/// rustybug a moderately simple debugger written in rust. Not intended to be feature complete more
-/// a toy project and way to test some tarpaulin assumptions.
-#[derive(Debug, Parser)]
-pub struct Args {
-    /// Executable to debug
-    input: PathBuf,
-}
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
+        .init();
+    tracing::info!("rustybug");
 
-fn main() {
     let args = Args::parse();
+
+    let mut sm = DebuggerStateMachine::start(args)?;
+
+    while State::Finished != sm.wait()? {}
+
+    Ok(())
 }

@@ -8,7 +8,7 @@ use std::process::Command;
 use tracing::{info, warn};
 
 /// Returns the coverage statistics for a test executable in the given workspace
-pub fn get_test_coverage(exe: &Path, ignored: bool) -> anyhow::Result<Option<Pid>> {
+pub fn launch_program(exe: &Path) -> anyhow::Result<Option<Pid>> {
     if !exe.exists() {
         warn!("Test at {} doesn't exist", exe.display());
         return Ok(None);
