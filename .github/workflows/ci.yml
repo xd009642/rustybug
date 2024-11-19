@@ -1,0 +1,40 @@
+name: Build
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+env:
+  RUST_BACKTRACE: 1
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version:
+          - stable
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.version }}
+          components: rustfmt
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install meson==1.4.1 ninja
+      - name: build c projects
+        run: |
+          cd tests/data/apps
+          meson setup build
+          cd build
+          meson compile
+      - name: test
+        run: cargo test
+      - name: check formatting
+        run: cargo fmt -- --check
+
+
