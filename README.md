@@ -32,3 +32,10 @@ here.
 * ratatui 
 * Generate tests and random interactions in C or rust using parsers like syn or [lang\_c](https://docs.rs/lang-c/0.15.1/lang_c/) to pick random breakpoint locations
 * Deterministic Simulation Testing
+
+## TODO
+
+* signal handling
+* segfault handling 
+* fork handling
+* nice thread handling 
