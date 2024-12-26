@@ -1,6 +1,7 @@
 use crate::linux::launch_program;
 use clap::Parser;
 use nix::errno::Errno;
+use nix::sys::ptrace;
 use nix::sys::signal::Signal;
 use nix::sys::wait::*;
 use nix::unistd::Pid;
@@ -16,10 +17,25 @@ pub mod ptrace_control;
 
 /// rustybug a moderately simple debugger written in rust. Not intended to be feature complete more
 /// a toy project and way to test some tarpaulin assumptions.
-#[derive(Debug, Parser)]
+#[derive(Clone, Debug, Default, Parser)]
 pub struct Args {
     /// Executable to debug
-    pub input: PathBuf,
+    pub input: Option<PathBuf>,
+    /// PID of a running process to attach to
+    #[clap(long, short)]
+    pub pid: Option<i32>,
+}
+
+impl Args {
+    pub fn name(&self) -> String {
+        if let Some(input) = self.input.as_ref() {
+            input.display().to_string()
+        } else if let Some(pid) = self.pid {
+            format!("pid: {}", pid)
+        } else {
+            "No Attached Process".to_string()
+        }
+    }
 }
 
 pub struct DebuggerStateMachine {
@@ -35,7 +51,15 @@ pub enum State {
 
 impl DebuggerStateMachine {
     pub fn start(args: Args) -> anyhow::Result<Self> {
-        let pid = launch_program(&args.input)?.unwrap();
+        let pid = if let Some(input) = args.input.as_ref() {
+            launch_program(input)?.unwrap()
+        } else if let Some(pid) = args.pid {
+            let pid = Pid::from_raw(pid);
+            ptrace::attach(pid).unwrap();
+            pid
+        } else {
+            panic!("You should provide an executable name or PID");
+        };
 
         let waiting = Instant::now();
         let timeout = Duration::from_secs(15);
