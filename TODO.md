@@ -12,6 +12,7 @@ Page 31.
 * Redivert attached process stdout/stderr
 * Command interface for ratatui
 * Breakpoint setting etc
+* tui-logger smart tui widget layouting
 
 ## Diary
 
