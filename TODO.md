@@ -5,12 +5,13 @@ place to jot down any notes.
 
 ## Book Spot
 
-Page 31.
+Pdf Page 63 book page number 31.
 
 ## Current TODO list 
 
 * Redivert attached process stdout/stderr
 * Breakpoint setting etc
+* tab autocomplete on commands would be nice
 
 ## Diary
 
@@ -18,6 +19,8 @@ Page 31.
 
 * Created basic layout 
 * Added basic command processing - restart or start a new process, show hide debug logs
+* Help message
+* Command history
 
 ### 2024-12-26
 

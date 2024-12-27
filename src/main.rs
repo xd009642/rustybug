@@ -11,6 +11,7 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use rustybug::{Args, DebuggerStateMachine, State};
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use tracing::{error, info};
 use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
@@ -40,6 +41,7 @@ fn main() -> anyhow::Result<()> {
     let mut app = App {
         args,
         show_logs: true,
+        history_len: 10,
         ..Default::default()
     };
     if let Err(e) = app.run(&mut terminal) {
@@ -67,7 +69,10 @@ pub struct App {
     show_help: bool,
     show_logs: bool,
     current_command: String,
+    history_len: usize,
     debugger: Option<DebuggerStateMachine>,
+    command_history: VecDeque<String>,
+    history_index: Option<usize>,
 }
 
 impl App {
@@ -87,6 +92,7 @@ impl App {
                 }
             }
         }
+        info!("Exiting");
         Ok(())
     }
 
@@ -116,6 +122,46 @@ impl App {
         }
     }
 
+    fn run_command(&mut self, command: &str) -> Result<()> {
+        match command {
+            "q" | "quit" => self.exit(),
+            "l" | "logs" => self.toggle_logs(),
+            "?" | "help" => {
+                self.show_help = true;
+            }
+            "restart" => {
+                self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
+            }
+            x if x.starts_with("load ") => {
+                let path = x.trim_start_matches("load ");
+                let path = PathBuf::from(path);
+                self.args.set_input(path);
+                self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
+            }
+            x if x.starts_with("attach ") => {
+                let pid_str = x.trim_start_matches("attach ");
+                let pid = pid_str.parse::<i32>();
+                match pid {
+                    Ok(pid) => {
+                        self.args.set_pid(pid);
+                        self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
+                    }
+                    Err(e) => {
+                        error!(
+                            "attach expects a pid. '{}' is not a valid pid: {}",
+                            pid_str, e
+                        );
+                    }
+                }
+            }
+            x if !x.trim().is_empty() => {
+                error!("Unknown command: {}", command)
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
         if self.show_help {
             self.show_help = false;
@@ -125,45 +171,46 @@ impl App {
             KeyCode::Char(c) => {
                 self.current_command.push(c);
             }
-            KeyCode::Enter => {
-                match self.current_command.as_str() {
-                    "q" | "quit" => self.exit(),
-                    "l" | "logs" => self.toggle_logs(),
-                    "?" | "help" => {
-                        self.show_help = true;
-                    }
-                    "restart" => {
-                        self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
-                    }
-                    x if x.starts_with("load ") => {
-                        let path = x.trim_start_matches("load ");
-                        let path = PathBuf::from(path);
-                        self.args.set_input(path);
-                        self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
-                    }
-                    x if x.starts_with("attach ") => {
-                        let pid_str = x.trim_start_matches("attach ");
-                        let pid = pid_str.parse::<i32>();
-                        match pid {
-                            Ok(pid) => {
-                                self.args.set_pid(pid);
-                                self.debugger =
-                                    Some(DebuggerStateMachine::start(self.args.clone())?);
-                            }
-                            Err(e) => {
-                                error!(
-                                    "attach expects a pid. '{}' is not a valid pid: {}",
-                                    pid_str, e
-                                );
-                            }
-                        }
-                    }
-                    x if !x.trim().is_empty() => {
-                        error!("Unknown command: {}", self.current_command)
-                    }
-                    _ => {}
+            KeyCode::Down => match self.history_index.as_mut() {
+                Some(index) if *index + 1 >= self.command_history.len() => {
+                    self.current_command.clear();
+                    self.history_index = None;
                 }
-                self.current_command.clear();
+                Some(index) => {
+                    *index += 1;
+                    if let Some(command) = self.command_history.get(*index) {
+                        self.current_command = command.clone();
+                    }
+                }
+                None => {}
+            },
+            KeyCode::Up => {
+                if let Some(index) = self.history_index.as_mut() {
+                    *index = index.saturating_sub(1);
+                    if let Some(command) = self.command_history.get(*index) {
+                        self.current_command = command.clone();
+                    }
+                } else {
+                    if let Some(history) = self.command_history.back() {
+                        self.current_command = history.clone();
+                        self.history_index = Some(self.command_history.len() - 1);
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                let mut command = String::new();
+                std::mem::swap(&mut command, &mut self.current_command);
+                self.run_command(&command);
+                if self.history_len > 0 {
+                    if self.command_history.back() != Some(&command) {
+                        while self.command_history.len() >= self.history_len.saturating_sub(1) {
+                            self.command_history.pop_front();
+                        }
+                        // So this will put nonsense onto the history we should actually parse into proper
+                        // commands
+                        self.command_history.push_back(command);
+                    }
+                }
             }
             KeyCode::Esc => self.current_command.clear(),
             KeyCode::Backspace => {
