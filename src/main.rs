@@ -3,24 +3,39 @@ use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
+    layout::{Constraint, Flex, Layout, Rect},
     style::{Style, Stylize},
     symbols::border,
     text::{Line, Span, Text},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Clear, Paragraph, Widget},
     DefaultTerminal, Frame,
 };
 use rustybug::{Args, DebuggerStateMachine, State};
 use std::path::PathBuf;
 use tracing::{error, info};
 use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
-use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget};
+use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
+
+const HELP_TEXT: &str = "Rustybug
+This is a simple debugger mainly for playing with ptrace. But being a debugger there are
+some commands to learn:
+
+attach <PID>   Attach to the given PID for debugging
+load <PATH>    Loads the given program and starts debugging it. TODO args
+restart        Restart the program/attached pid you launched rustybug with
+l logs         Show the debug logs
+q quit         Quit rustybuy
+? help         Show this message
+
+Press any key to dismiss this message.
+";
 
 fn main() -> anyhow::Result<()> {
     init_logging()?;
     let args = Args::parse();
 
     let mut terminal = ratatui::init();
+    terminal.hide_cursor();
 
     let mut app = App {
         args,
@@ -49,6 +64,7 @@ fn init_logging() -> Result<()> {
 pub struct App {
     args: Args,
     exit: bool,
+    show_help: bool,
     show_logs: bool,
     current_command: String,
     debugger: Option<DebuggerStateMachine>,
@@ -76,6 +92,17 @@ impl App {
 
     fn draw(&self, frame: &mut Frame) {
         frame.render_widget(self, frame.area());
+        if self.show_help {
+            let area = frame.area();
+            let rect = popup_area(area, 80, 60);
+            frame.render_widget(Clear, area);
+
+            let block = Block::bordered().title("Help");
+
+            let paragraph = Paragraph::new(HELP_TEXT).block(block);
+
+            frame.render_widget(paragraph, area);
+        }
     }
 
     fn handle_events(&mut self) -> Result<()> {
@@ -90,6 +117,10 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) -> Result<()> {
+        if self.show_help {
+            self.show_help = false;
+            return Ok(());
+        }
         match key_event.code {
             KeyCode::Char(c) => {
                 self.current_command.push(c);
@@ -98,7 +129,9 @@ impl App {
                 match self.current_command.as_str() {
                     "q" | "quit" => self.exit(),
                     "l" | "logs" => self.toggle_logs(),
-                    "?" | "help" => self.show_help(),
+                    "?" | "help" => {
+                        self.show_help = true;
+                    }
                     "restart" => {
                         self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
                     }
@@ -148,10 +181,6 @@ impl App {
     fn toggle_logs(&mut self) {
         self.show_logs = !self.show_logs;
     }
-
-    fn show_help(&mut self) {
-        // Something!
-    }
 }
 
 impl Widget for &App {
@@ -168,13 +197,17 @@ impl Widget for &App {
             let [view, logs, prompt] =
                 Layout::vertical([Constraint::Fill(5), Constraint::Fill(3), Constraint::Max(1)])
                     .areas(area);
-            TuiLoggerSmartWidget::default()
+
+            let block = Block::bordered().border_set(border::THICK);
+
+            TuiLoggerWidget::default()
                 .output_separator(':')
                 .output_timestamp(Some("%H:%M:%S".to_string()))
                 .output_level(Some(TuiLoggerLevelOutput::Abbreviated))
                 .output_target(true)
                 .output_file(true)
                 .output_line(true)
+                .block(block)
                 .render(logs, buf);
             [view, prompt]
         } else {
@@ -186,9 +219,9 @@ impl Widget for &App {
             .title_bottom(instructions.centered())
             .border_set(border::THICK);
 
-        let counter_text = Text::from(vec![Line::from(self.args.name())]);
+        let view_window = Text::from(vec![Line::from(self.args.name())]);
 
-        Paragraph::new(counter_text)
+        Paragraph::new(view_window)
             .centered()
             .block(block)
             .render(view, buf);
@@ -200,4 +233,13 @@ impl Widget for &App {
         .left_aligned()
         .render(prompt, buf);
     }
+}
+
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
+    let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
+    let [area] = vertical.areas(area);
+    let [area] = horizontal.areas(area);
+    area
 }
