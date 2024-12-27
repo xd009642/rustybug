@@ -5,7 +5,7 @@ place to jot down any notes.
 
 ## Book Spot
 
-Pdf Page 63 book page number 31.
+Pdf Page 68 book page number 36.
 
 ## Current TODO list 
 
