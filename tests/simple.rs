@@ -14,7 +14,8 @@ rusty_fork_test! {
         for test in TESTS {
             println!("Running: {}", test);
             let args = Args {
-                input: test.into()
+                input: Some(test.into()),
+                pid: None,
             };
             let mut sm = DebuggerStateMachine::start(args).unwrap();
 

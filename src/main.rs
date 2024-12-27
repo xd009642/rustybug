@@ -11,11 +11,9 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use rustybug::{Args, DebuggerStateMachine, State};
-use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::{error, info};
-use tracing_error::ErrorLayer;
-use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget};
 
 fn main() -> anyhow::Result<()> {
