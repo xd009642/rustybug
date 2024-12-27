@@ -8,7 +8,7 @@ use nix::unistd::Pid;
 use nix::Error as NixErr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tracing::info;
+use tracing::{debug, info};
 
 pub mod breakpoint;
 //pub mod test_loader;
@@ -36,8 +36,19 @@ impl Args {
             "No Attached Process".to_string()
         }
     }
+
+    pub fn set_input(&mut self, input: PathBuf) {
+        self.input = Some(input);
+        self.pid = None;
+    }
+
+    pub fn set_pid(&mut self, input: i32) {
+        self.pid = Some(input);
+        self.input = None;
+    }
 }
 
+#[derive(Debug)]
 pub struct DebuggerStateMachine {
     root: Pid,
     args: Args,
@@ -70,7 +81,7 @@ impl DebuggerStateMachine {
             match waitpid(pid, Some(WaitPidFlag::WNOHANG))? {
                 WaitStatus::StillAlive => {}
                 sig @ WaitStatus::Stopped(_, Signal::SIGTRAP) => {
-                    println!("We're free running!");
+                    debug!("We're free running!");
                     ptrace_control::continue_exec(pid, None)?;
                     break;
                 }

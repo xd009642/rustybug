@@ -10,11 +10,14 @@ Page 31.
 ## Current TODO list 
 
 * Redivert attached process stdout/stderr
-* Command interface for ratatui
 * Breakpoint setting etc
-* tui-logger smart tui widget layouting
 
 ## Diary
+
+### 2024-12-27
+
+* Created basic layout 
+* Added basic command processing - restart or start a new process, show hide debug logs
 
 ### 2024-12-26
 
