@@ -21,6 +21,7 @@ Pdf Page 63 book page number 31.
 * Added basic command processing - restart or start a new process, show hide debug logs
 * Help message
 * Command history
+* Move from strings to a command enum to make some parts of the code easier!
 
 ### 2024-12-26
 

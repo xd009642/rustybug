@@ -15,6 +15,7 @@ object = "0.36.5"
 procfs = "0.17.0"
 ratatui = "0.29.0"
 rustc-demangle = { version = "0.1.24", features = ["std"] }
+thiserror = "2.0.9"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt", "chrono", "ansi", "smallvec", "tracing-log"] }
 tui-logger = { version = "0.14.1", features = ["crossterm", "tracing-support"] }

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
 pub mod breakpoint;
+pub mod commands;
 //pub mod test_loader;
 pub mod linux;
 pub mod ptrace_control;

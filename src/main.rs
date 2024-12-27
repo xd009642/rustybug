@@ -10,9 +10,10 @@ use ratatui::{
     widgets::{Block, Clear, Paragraph, Widget},
     DefaultTerminal, Frame,
 };
-use rustybug::{Args, DebuggerStateMachine, State};
+use rustybug::{commands::Command, Args, DebuggerStateMachine, State};
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tracing::{error, info};
 use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
@@ -122,42 +123,28 @@ impl App {
         }
     }
 
-    fn run_command(&mut self, command: &str) -> Result<()> {
+    fn run_command(&mut self, command: &Command) -> Result<()> {
         match command {
-            "q" | "quit" => self.exit(),
-            "l" | "logs" => self.toggle_logs(),
-            "?" | "help" => {
+            Command::Quit => self.exit(),
+            Command::ToggleLogs => self.toggle_logs(),
+            Command::Help => {
                 self.show_help = true;
             }
-            "restart" => {
+            Command::Restart => {
                 self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
             }
-            x if x.starts_with("load ") => {
-                let path = x.trim_start_matches("load ");
-                let path = PathBuf::from(path);
-                self.args.set_input(path);
+            Command::Load(path) => {
+                self.args.set_input(path.clone());
                 self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
             }
-            x if x.starts_with("attach ") => {
-                let pid_str = x.trim_start_matches("attach ");
-                let pid = pid_str.parse::<i32>();
-                match pid {
-                    Ok(pid) => {
-                        self.args.set_pid(pid);
-                        self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
-                    }
-                    Err(e) => {
-                        error!(
-                            "attach expects a pid. '{}' is not a valid pid: {}",
-                            pid_str, e
-                        );
-                    }
-                }
+            Command::Attach(pid) => {
+                self.args.set_pid(*pid);
+                self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
             }
-            x if !x.trim().is_empty() => {
-                error!("Unknown command: {}", command)
+            Command::Null => {}
+            c => {
+                error!("{:?} is not yet implemented", c);
             }
-            _ => {}
         }
         Ok(())
     }
@@ -198,17 +185,25 @@ impl App {
                 }
             }
             KeyCode::Enter => {
-                let mut command = String::new();
-                std::mem::swap(&mut command, &mut self.current_command);
+                let mut command_str = String::new();
+                std::mem::swap(&mut command_str, &mut self.current_command);
+                let command = match Command::from_str(&command_str) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        error!("Invalid command: {}", e);
+                        // We don't need to bubble these errors up.
+                        return Ok(());
+                    }
+                };
                 self.run_command(&command);
-                if self.history_len > 0 {
-                    if self.command_history.back() != Some(&command) {
+                if command.store_in_history() && self.history_len > 0 {
+                    if self.command_history.back() != Some(&command_str) {
                         while self.command_history.len() >= self.history_len.saturating_sub(1) {
                             self.command_history.pop_front();
                         }
                         // So this will put nonsense onto the history we should actually parse into proper
                         // commands
-                        self.command_history.push_back(command);
+                        self.command_history.push_back(command_str);
                     }
                 }
             }
