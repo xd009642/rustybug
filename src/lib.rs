@@ -81,3 +81,24 @@ impl DebuggerStateMachine {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_on_invalid_launch() {
+        let args = Args {
+            input: Some("i-am-not-a-real-program-you-cannot-run-me".into()),
+            pid: None,
+        };
+        let sm = DebuggerStateMachine::start(args);
+        assert!(sm.is_err());
+    }
+
+    #[test]
+    #[should_panic]
+    fn panic_if_starting_nothing() {
+        let _ = DebuggerStateMachine::start(Args::default());
+    }
+}
