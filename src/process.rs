@@ -1,13 +1,14 @@
 use crate::linux::launch_program;
+use crate::ptrace_control::*;
 use nix::errno::Errno;
 use nix::sys::ptrace;
-use nix::sys::signal::Signal;
+use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::*;
 use nix::unistd::Pid;
 use nix::Error as NixErr;
 use std::path::Path;
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum State {
@@ -104,5 +105,36 @@ impl Process {
         };
         self.state = state;
         Ok(ret)
+    }
+}
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        if self.pid.as_raw() != 0 {
+            if self.state == State::Running {
+                if let Err(e) = kill(self.pid, Signal::SIGSTOP) {
+                    warn!("Sending sigstop to process on teardown failed: {}", e);
+                }
+                if let Err(e) = waitpid(self.pid, None) {
+                    warn!("Couldn't wait on receiving stop: {}", e);
+                }
+            }
+
+            if let Err(e) = detach_child(self.pid) {
+                warn!("Failed to detach on teardown: {}", e);
+            }
+            if let Err(e) = kill(self.pid, Signal::SIGCONT) {
+                warn!("Couldn't continue after detach: {}", e);
+            }
+
+            if self.terminate_on_end {
+                if let Err(e) = kill(self.pid, Signal::SIGKILL) {
+                    warn!("Couldn't issue sigkill on teardown: {}", e);
+                }
+                if let Err(e) = waitpid(self.pid, None) {
+                    warn!("Wait after sigkill failed: {}", e);
+                }
+            }
+        }
     }
 }

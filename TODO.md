@@ -5,7 +5,7 @@ place to jot down any notes.
 
 ## Book Spot
 
-Pdf Page 68 book page number 36.
+Pdf Page 72 book page number 40.
 
 ## Current TODO list 
 
@@ -22,6 +22,7 @@ Pdf Page 68 book page number 36.
 * Start on process abstraction
     - Refactor wait logic into process type
     - Expand state variable further
+    - Drop impl that kills or detaches
 * No longer continue program on launch user has to do first continue
 
 ### 2024-12-27
