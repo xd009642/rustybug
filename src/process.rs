@@ -5,8 +5,21 @@ use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::*;
 use nix::unistd::Pid;
 use std::path::Path;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 use tracing::{error, info, warn};
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct StopReason {
+    reason: State,
+    info: Info,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum Info {
+    Signalled(Signal),
+    Return(u8),
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum State {
@@ -32,6 +45,10 @@ pub enum ProcessError {
     AttachFailed,
     #[error("failed to wait on the process pid")]
     WaitFailed,
+    #[error("failed to resume process")]
+    ContinueFailed,
+    #[error("blocking operation timed out")]
+    Timeout,
 }
 
 #[derive(Debug)]
@@ -50,11 +67,16 @@ impl Process {
             })?
             .ok_or(ProcessError::NoPid)?;
 
-        Ok(Self {
+        let mut ret = Self {
             pid,
             terminate_on_end: true,
             state: State::Stopped,
-        })
+        };
+
+        let timeout = Duration::from_secs(15);
+        ret.blocking_wait_on_signal(timeout)?;
+
+        Ok(ret)
     }
 
     pub fn attach(pid: Pid) -> Result<Self, ProcessError> {
@@ -62,15 +84,22 @@ impl Process {
             error!("Failed to attach: {}", e);
             ProcessError::AttachFailed
         })?;
-        Ok(Self {
+        let mut ret = Self {
             pid,
             terminate_on_end: false,
             state: State::Stopped,
-        })
+        };
+
+        let timeout = Duration::from_secs(15);
+        ret.blocking_wait_on_signal(timeout)?;
+
+        Ok(ret)
     }
 
-    pub fn resume(&self) -> Result<Self, ProcessError> {
-        todo!()
+    pub fn resume(&mut self) -> Result<(), ProcessError> {
+        continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
+        self.state = State::Running;
+        Ok(())
     }
 
     pub fn pid(&self) -> Pid {
@@ -81,13 +110,30 @@ impl Process {
         self.state
     }
 
-    pub fn wait_on_signal(&mut self) -> Result<Option<Pid>, ProcessError> {
+    pub fn blocking_wait_on_signal(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<StopReason, ProcessError> {
+        let waiting = Instant::now();
+        while waiting.elapsed() < timeout {
+            if let Some(res) = self.wait_on_signal()? {
+                return Ok(res);
+            }
+        }
+        Err(ProcessError::Timeout)
+    }
+
+    pub fn wait_on_signal(&mut self) -> Result<Option<StopReason>, ProcessError> {
         let mut ret = None;
         let state = match waitpid(self.pid, Some(WaitPidFlag::WNOHANG))
             .map_err(|_| ProcessError::WaitFailed)?
         {
             WaitStatus::StillAlive => State::Running,
             sig @ WaitStatus::Exited(child, ret_code) => {
+                ret = Some(StopReason {
+                    reason: State::Exited,
+                    info: Info::Return(ret_code as u8),
+                });
                 if child == self.pid {
                     info!("Process {:?} exited with exit code {}", child, ret_code);
                     State::Exited
@@ -95,9 +141,19 @@ impl Process {
                     State::Running
                 }
             }
-            WaitStatus::Stopped(child, Signal::SIGTRAP) => {
-                ret = Some(child);
+            WaitStatus::Stopped(child, signal) => {
+                ret = Some(StopReason {
+                    reason: State::Stopped,
+                    info: Info::Signalled(signal),
+                });
                 State::Stopped
+            }
+            WaitStatus::Signaled(pid, signal, has_coredump) => {
+                ret = Some(StopReason {
+                    reason: State::Terminated,
+                    info: Info::Signalled(signal),
+                });
+                State::Terminated
             }
             _ => unimplemented!(),
         };
@@ -118,6 +174,7 @@ impl Drop for Process {
                 }
             }
 
+            // For detach to work we need to be stopped! Hence the stop and wait before
             if let Err(e) = detach_child(self.pid) {
                 warn!("Failed to detach on teardown: {}", e);
             }

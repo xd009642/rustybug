@@ -50,7 +50,6 @@ impl Args {
 #[derive(Debug)]
 pub struct DebuggerStateMachine {
     root: Process,
-    paused: Vec<Pid>,
     args: Args,
 }
 
@@ -65,24 +64,9 @@ impl DebuggerStateMachine {
             panic!("You should provide an executable name or PID");
         };
 
-        let waiting = Instant::now();
-        let timeout = Duration::from_secs(15);
-
         info!(pid=?root.pid(), "program launch. Continuing");
 
-        let mut paused = vec![];
-
-        while waiting.elapsed() < timeout {
-            let pid = root.wait_on_signal()?;
-            if let Some(pid) = pid {
-                paused.push(pid);
-                if root.pid() == pid {
-                    break;
-                }
-            }
-        }
-
-        Ok(Self { root, paused, args })
+        Ok(Self { root, args })
     }
 
     pub fn wait(&mut self) -> anyhow::Result<State> {
@@ -91,8 +75,8 @@ impl DebuggerStateMachine {
     }
 
     pub fn cont(&mut self) -> anyhow::Result<()> {
-        for pid in self.paused.drain(..) {
-            ptrace_control::continue_exec(pid, None)?;
+        if self.root.state() == State::Stopped {
+            self.root.resume()?;
         }
         Ok(())
     }

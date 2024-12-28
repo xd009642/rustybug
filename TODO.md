@@ -5,7 +5,7 @@ place to jot down any notes.
 
 ## Book Spot
 
-Pdf Page 72 book page number 40.
+Pdf Page 79 book page number 47.
 
 ## Current TODO list 
 
@@ -18,11 +18,14 @@ Pdf Page 72 book page number 40.
 
 ### 2024-12-28
 
+Milestone reached Chapter 4!
+
 * Implement parsing of break and continue commands
 * Start on process abstraction
     - Refactor wait logic into process type
     - Expand state variable further
     - Drop impl that kills or detaches
+    - Return a stop reason on wait and added `WaitStatus::Signaled` to match
 * No longer continue program on launch user has to do first continue
 
 ### 2024-12-27
