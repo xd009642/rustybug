@@ -10,9 +10,8 @@ use ratatui::{
     widgets::{Block, Clear, Paragraph, Widget},
     DefaultTerminal, Frame,
 };
-use rustybug::{commands::Command, Args, DebuggerStateMachine, State};
+use rustybug::{commands::Command, Args, DebuggerStateMachine};
 use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::str::FromStr;
 use tracing::{error, info};
 use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};

@@ -1,11 +1,10 @@
 use crate::ptrace_control::*;
-use nix::sched::*;
 use nix::sys::personality;
 use nix::unistd::*;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::process::Command;
-use tracing::{info, warn};
+use tracing::warn;
 
 /// Returns the coverage statistics for a test executable in the given workspace
 pub fn launch_program(exe: &Path) -> anyhow::Result<Option<Pid>> {

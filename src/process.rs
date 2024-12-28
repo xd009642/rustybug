@@ -1,11 +1,9 @@
 use crate::linux::launch_program;
 use crate::ptrace_control::*;
-use nix::errno::Errno;
 use nix::sys::ptrace;
 use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::*;
 use nix::unistd::Pid;
-use nix::Error as NixErr;
 use std::path::Path;
 use thiserror::Error;
 use tracing::{error, info, warn};
