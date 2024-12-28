@@ -6,6 +6,7 @@ progs = [
     ['test_project',   'testproject.c'    ],
     ['user_signal',   'user_signal.c'    ],
     ['threads',   'threads.c'    ],
+    ['dont_stop', 'dont_stop.c' ],
 ]
 
 foreach p : progs
