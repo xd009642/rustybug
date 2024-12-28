@@ -12,8 +12,13 @@ Pdf Page 68 book page number 36.
 * Redivert attached process stdout/stderr
 * Breakpoint setting etc
 * tab autocomplete on commands would be nice
+* Command history not being stringly typed (although it only being valid commands and deduped is maybe nice enough)
 
 ## Diary
+
+### 2024-12-28
+
+* Implement parsing of break and continue commands
 
 ### 2024-12-27
 
