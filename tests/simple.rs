@@ -19,7 +19,9 @@ rusty_fork_test! {
             };
             let mut sm = DebuggerStateMachine::start(args).unwrap();
 
-            while State::Finished != sm.wait().unwrap() {
+            sm.cont().unwrap();
+
+            while State::Exited != sm.wait().unwrap() {
 
             }
         }

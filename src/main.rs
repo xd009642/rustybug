@@ -86,7 +86,7 @@ impl App {
             if let Some(sm) = self.debugger.as_mut() {
                 let state = sm.wait()?;
 
-                if state == State::Finished {
+                if state.is_closed() {
                     self.debugger = None;
                     info!("Done");
                     //self.exit();
@@ -140,6 +140,11 @@ impl App {
             Command::Attach(pid) => {
                 self.args.set_pid(*pid);
                 self.debugger = Some(DebuggerStateMachine::start(self.args.clone())?);
+            }
+            Command::Continue => {
+                if let Some(proc) = self.debugger.as_mut() {
+                    proc.cont()?;
+                }
             }
             Command::Null => {}
             c => {

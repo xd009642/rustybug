@@ -1,4 +1,5 @@
 use crate::linux::launch_program;
+use crate::process::Process;
 use clap::Parser;
 use nix::errno::Errno;
 use nix::sys::ptrace;
@@ -10,10 +11,13 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
+pub use crate::process::State;
+
 pub mod breakpoint;
 pub mod commands;
 //pub mod test_loader;
 pub mod linux;
+pub mod process;
 pub mod ptrace_control;
 
 /// rustybug a moderately simple debugger written in rust. Not intended to be feature complete more
@@ -51,24 +55,18 @@ impl Args {
 
 #[derive(Debug)]
 pub struct DebuggerStateMachine {
-    root: Pid,
+    root: Process,
+    paused: Vec<Pid>,
     args: Args,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum State {
-    Running,
-    Finished,
 }
 
 impl DebuggerStateMachine {
     pub fn start(args: Args) -> anyhow::Result<Self> {
-        let pid = if let Some(input) = args.input.as_ref() {
-            launch_program(input)?.unwrap()
+        let mut root = if let Some(input) = args.input.as_ref() {
+            Process::launch(input)?
         } else if let Some(pid) = args.pid {
             let pid = Pid::from_raw(pid);
-            ptrace::attach(pid).unwrap();
-            pid
+            Process::attach(pid)?
         } else {
             panic!("You should provide an executable name or PID");
         };
@@ -76,35 +74,32 @@ impl DebuggerStateMachine {
         let waiting = Instant::now();
         let timeout = Duration::from_secs(15);
 
-        info!(pid=?pid, "program launch. Continuing");
+        info!(pid=?root.pid(), "program launch. Continuing");
+
+        let mut paused = vec![];
 
         while waiting.elapsed() < timeout {
-            match waitpid(pid, Some(WaitPidFlag::WNOHANG))? {
-                WaitStatus::StillAlive => {}
-                sig @ WaitStatus::Stopped(_, Signal::SIGTRAP) => {
-                    debug!("We're free running!");
-                    ptrace_control::continue_exec(pid, None)?;
+            let pid = root.wait_on_signal()?;
+            if let Some(pid) = pid {
+                paused.push(pid);
+                if root.pid() == pid {
                     break;
                 }
-                unexpected => anyhow::bail!("Unexpected signal: {:?}", unexpected),
             }
         }
 
-        Ok(Self { root: pid, args })
+        Ok(Self { root, paused, args })
     }
 
     pub fn wait(&mut self) -> anyhow::Result<State> {
-        match waitpid(self.root, Some(WaitPidFlag::WNOHANG | WaitPidFlag::__WALL))? {
-            WaitStatus::StillAlive => Ok(State::Running),
-            WaitStatus::Exited(child, ret_code) => {
-                if child == self.root {
-                    info!("Process {:?} exited with exit code {}", child, ret_code);
-                    Ok(State::Finished)
-                } else {
-                    Ok(State::Running)
-                }
-            }
-            _ => unimplemented!(),
+        self.root.wait_on_signal()?;
+        Ok(self.root.state())
+    }
+
+    pub fn cont(&mut self) -> anyhow::Result<()> {
+        for pid in self.paused.drain(..) {
+            ptrace_control::continue_exec(pid, None)?;
         }
+        Ok(())
     }
 }

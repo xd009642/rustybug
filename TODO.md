@@ -19,6 +19,10 @@ Pdf Page 68 book page number 36.
 ### 2024-12-28
 
 * Implement parsing of break and continue commands
+* Start on process abstraction
+    - Refactor wait logic into process type
+    - Expand state variable further
+* No longer continue program on launch user has to do first continue
 
 ### 2024-12-27
 
