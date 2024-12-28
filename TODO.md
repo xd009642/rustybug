@@ -5,7 +5,7 @@ place to jot down any notes.
 
 ## Book Spot
 
-Pdf Page 79 book page number 47.
+Pdf Page 102 book page number 70.
 
 ## Current TODO list 
 
@@ -18,7 +18,8 @@ Pdf Page 79 book page number 47.
 
 ### 2024-12-28
 
-Milestone reached Chapter 4!
+Milestone reached Chapter 4 - but decided I didn't need pipes for testing so....
+Milestone reached Chatper 5!
 
 * Implement parsing of break and continue commands
 * Start on process abstraction
