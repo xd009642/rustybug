@@ -4,6 +4,7 @@ use rustybug::{process::Process, Args, DebuggerStateMachine, State};
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
+use tracing_test::traced_test;
 
 const TESTS: &[&'static str] = &[
     "tests/data/apps/build/test_project",
@@ -13,6 +14,7 @@ const TESTS: &[&'static str] = &[
 
 rusty_fork_test! {
     #[test]
+    #[traced_test]
     fn no_breakpoints() {
         for test in TESTS {
             println!("Running: {}", test);
@@ -31,6 +33,7 @@ rusty_fork_test! {
     }
 
     #[test]
+    #[traced_test]
     fn attach_doesnt_sigkill() {
 
         let mut child = Command::new("tests/data/apps/build/dont_stop")
@@ -61,6 +64,7 @@ rusty_fork_test! {
     }
 
     #[test]
+    #[traced_test]
     fn register_peek_poke() {
             let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
 
@@ -79,5 +83,27 @@ rusty_fork_test! {
             assert_eq!(actual_regs.regs.rax, expected_rax);
             assert_eq!(actual_regs.fpregs.st_space[0], expected_st0);
 
+    }
+
+    #[test]
+    #[ignore]
+    #[traced_test]
+    fn step_to_end_works() {
+        let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
+        let mut has_exited = false;
+        println!("starting update loop");
+        while !proc.state().is_closed() {
+            if let Some(reason) = proc.wait_on_signal().unwrap() {
+                println!("Stopped: {:?}", reason);
+                if reason.reason == State::Stopped {
+                    proc.step().unwrap();
+                } else if reason.reason == State::Exited {
+                    has_exited = true;
+                }
+            } else {
+                println!("Still going");
+            }
+        }
+        assert!(has_exited, "process didn't exit nicely");
     }
 }
