@@ -1,6 +1,7 @@
 //! In these tests we'll just run a program setting no breakpoints.
 use rusty_fork::rusty_fork_test;
-use rustybug::{Args, DebuggerStateMachine, State};
+use rustybug::{process::Process, Args, DebuggerStateMachine, State};
+use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
@@ -57,5 +58,26 @@ rusty_fork_test! {
         assert!(child.try_wait().unwrap().is_none());
 
         let _ = child.kill();
+    }
+
+    #[test]
+    fn register_peek_poke() {
+            let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
+
+            let mut regs = proc.get_all_registers().unwrap();
+
+            let expected_rax = regs.regs.rax.overflowing_add(42).0;
+            regs.regs.rax = expected_rax;
+
+            let expected_st0 = regs.fpregs.st_space[0].overflowing_add(56).0;
+            regs.fpregs.st_space[0] = expected_st0;
+
+            proc.write_all_registers(regs).unwrap();
+
+            let actual_regs = proc.get_all_registers().unwrap();
+
+            assert_eq!(actual_regs.regs.rax, expected_rax);
+            assert_eq!(actual_regs.fpregs.st_space[0], expected_st0);
+
     }
 }
