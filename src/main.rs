@@ -10,10 +10,13 @@ use ratatui::{
     widgets::{Block, Clear, Paragraph, Widget},
     DefaultTerminal, Frame,
 };
-use rustybug::{commands::Command, Args, DebuggerStateMachine};
+use rustybug::{
+    commands::{Command, Expression},
+    Args, DebuggerStateMachine,
+};
 use std::collections::VecDeque;
 use std::str::FromStr;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{self, layer::SubscriberExt, util::SubscriberInitExt};
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
 
@@ -145,6 +148,18 @@ impl App {
                     proc.cont()?;
                 }
             }
+            Command::Print(expr) => match expr {
+                Expression::Registers => {
+                    if let Some(sm) = self.debugger.as_ref() {
+                        match sm.get_registers() {
+                            Ok(regs) => info!("{:?}", regs),
+                            Err(e) => error!("Couldn't print registers: {}", e),
+                        }
+                    } else {
+                        warn!("Not debugging can't print registers");
+                    }
+                }
+            },
             Command::Null => {}
             c => {
                 error!("{:?} is not yet implemented", c);

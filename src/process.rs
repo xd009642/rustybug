@@ -1,6 +1,7 @@
 use crate::linux::launch_program;
 use crate::ptrace_control::*;
-use nix::sys::ptrace;
+use libc::{user_fpregs_struct, user_regs_struct};
+use nix::sys::ptrace::{self, regset};
 use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::*;
 use nix::unistd::Pid;
@@ -8,6 +9,12 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use tracing::{error, info, warn};
+
+#[derive(Clone, Debug)]
+pub struct Registers {
+    pub regs: user_regs_struct,
+    pub fpregs: user_fpregs_struct,
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct StopReason {
@@ -49,6 +56,16 @@ pub enum ProcessError {
     ContinueFailed,
     #[error("blocking operation timed out")]
     Timeout,
+    #[error("failed to write data")]
+    WriteFailed,
+    #[error("couldn't read user registers")]
+    RegisterReadFailed,
+    #[error("couldn't read user fp registers")]
+    FpRegisterReadFailed,
+    #[error("couldn't write user registers")]
+    RegisterWriteFailed,
+    #[error("couldn't write user fp registers")]
+    FpRegisterWriteFailed,
 }
 
 #[derive(Debug)]
@@ -97,6 +114,7 @@ impl Process {
     }
 
     pub fn resume(&mut self) -> Result<(), ProcessError> {
+        info!(pid=%self.pid, "Continuing process");
         continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
         self.state = State::Running;
         Ok(())
@@ -128,7 +146,7 @@ impl Process {
         let state = match waitpid(self.pid, Some(WaitPidFlag::WNOHANG))
             .map_err(|_| ProcessError::WaitFailed)?
         {
-            WaitStatus::StillAlive => State::Running,
+            WaitStatus::StillAlive => self.state,
             sig @ WaitStatus::Exited(child, ret_code) => {
                 ret = Some(StopReason {
                     reason: State::Exited,
@@ -136,6 +154,7 @@ impl Process {
                 });
                 if child == self.pid {
                     info!("Process {:?} exited with exit code {}", child, ret_code);
+                    self.pid = Pid::from_raw(0);
                     State::Exited
                 } else {
                     State::Running
@@ -159,6 +178,50 @@ impl Process {
         };
         self.state = state;
         Ok(ret)
+    }
+
+    pub fn write_user_area(&self, offset: u64, data: i64) -> Result<(), ProcessError> {
+        write_to_address(self.pid, offset, data).map_err(|e| {
+            error!("Failed to write to register offset({}): {}", offset, e);
+            ProcessError::WriteFailed
+        })
+    }
+
+    pub fn get_all_registers(&self) -> Result<Registers, ProcessError> {
+        let regs = ptrace::getregs(self.pid).map_err(|e| {
+            error!("Failed to read registers: {}", e);
+            ProcessError::RegisterReadFailed
+        })?;
+
+        let fpregs = ptrace::getregset::<regset::NT_PRFPREG>(self.pid).map_err(|e| {
+            error!("Failed to read fp registers: {}", e);
+            ProcessError::FpRegisterReadFailed
+        })?;
+
+        // In the book they do the debug registers but they aren't in the nix crate so I'll save
+        // them for now (maybe PR nix crate at some point or raise an issue when I understand them
+        // more).
+
+        Ok(Registers { regs, fpregs })
+    }
+
+    pub fn write_all_registers(&mut self, registers: Registers) -> Result<(), ProcessError> {
+        self.write_gp_registers(registers.regs)?;
+        self.write_fp_registers(registers.fpregs)
+    }
+
+    pub fn write_gp_registers(&mut self, regs: user_regs_struct) -> Result<(), ProcessError> {
+        ptrace::setregs(self.pid, regs).map_err(|e| {
+            error!("Failed to write registers: {}", e);
+            ProcessError::RegisterWriteFailed
+        })
+    }
+
+    pub fn write_fp_registers(&mut self, fpregs: user_fpregs_struct) -> Result<(), ProcessError> {
+        ptrace::setregset::<regset::NT_PRFPREG>(self.pid, fpregs).map_err(|e| {
+            error!("Failed to write fp registers: {}", e);
+            ProcessError::FpRegisterWriteFailed
+        })
     }
 }
 

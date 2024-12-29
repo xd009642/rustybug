@@ -16,6 +16,11 @@ Pdf Page 102 book page number 70.
 
 ## Diary
 
+### 2024-12-29
+
+* get and set registers implemented
+* print command implemented (can print all registers currently)
+
 ### 2024-12-28
 
 Milestone reached Chapter 4 - but decided I didn't need pipes for testing so....

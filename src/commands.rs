@@ -15,6 +15,8 @@ pub enum ParseError {
     },
     #[error("invalid location given {0}")]
     InvalidLocation(LocationError),
+    #[error("invalid expression given {0}")]
+    InvalidExpression(ExpressionError),
 }
 
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -35,6 +37,12 @@ pub enum LocationError {
     Empty,
 }
 
+#[derive(Debug, Error, Eq, PartialEq)]
+pub enum ExpressionError {
+    #[error("invalid expression")]
+    InvalidExpression,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     Quit,
@@ -46,6 +54,12 @@ pub enum Command {
     Continue,
     Break(Location),
     Null,
+    Print(Expression),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Expression {
+    Registers,
 }
 
 impl Command {
@@ -70,6 +84,11 @@ impl FromStr for Command {
             "?" | "help" => Ok(Self::Help),
             "continue" | "cont" | "c" => Ok(Self::Continue),
             "restart" => Ok(Self::Restart),
+            x if x.starts_with("print ") => {
+                let expr_str = x.trim_start_matches("print ");
+                let expr = Expression::from_str(expr_str).map_err(ParseError::InvalidExpression)?;
+                Ok(Self::Print(expr))
+            }
             x if x.starts_with("load ") => {
                 let path = x.trim_start_matches("load ");
                 let path = PathBuf::from(path);
@@ -132,6 +151,18 @@ impl FromStr for Location {
             Err(LocationError::Empty)
         } else {
             Err(LocationError::TooManyArgs(args.len()))
+        }
+    }
+}
+
+impl FromStr for Expression {
+    type Err = ExpressionError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "registers" {
+            Ok(Expression::Registers)
+        } else {
+            Err(ExpressionError::InvalidExpression)
         }
     }
 }

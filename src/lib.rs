@@ -1,4 +1,4 @@
-use crate::process::Process;
+use crate::process::{Process, Registers};
 use clap::Parser;
 use nix::unistd::Pid;
 use std::path::PathBuf;
@@ -64,7 +64,7 @@ impl DebuggerStateMachine {
             panic!("You should provide an executable name or PID");
         };
 
-        info!(pid=?root.pid(), "program launch. Continuing");
+        info!(pid=?root.pid(), "program launch.");
 
         Ok(Self { root, args })
     }
@@ -79,6 +79,17 @@ impl DebuggerStateMachine {
             self.root.resume()?;
         }
         Ok(())
+    }
+
+    pub fn get_registers(&self) -> anyhow::Result<Registers> {
+        if self.root.state() != State::Stopped {
+            anyhow::bail!(
+                "Process must be stopped to read registers: {:?}",
+                self.root.state()
+            );
+        }
+        let regs = self.root.get_all_registers()?;
+        Ok(regs)
     }
 }
 
