@@ -24,12 +24,15 @@ const HELP_TEXT: &str = "Rustybug
 This is a simple debugger mainly for playing with ptrace. But being a debugger there are
 some commands to learn:
 
-attach <PID>   Attach to the given PID for debugging
-load <PATH>    Loads the given program and starts debugging it. TODO args
-restart        Restart the program/attached pid you launched rustybug with
-l logs         Show the debug logs
-q quit         Quit rustybuy
-? help         Show this message
+attach <PID>       Attach to the given PID for debugging
+load <PATH>        Loads the given program and starts debugging it. TODO args
+restart            Restart the program/attached pid you launched rustybug with
+print              Print a given expression (currently only accepts 'registers')
+break <LOCATION>   Add a breakpoint at a given location - either an <ADDR> or <FILE> <LINE>
+l list             List all breakpoints
+logs               Show the debug logs
+q quit             Quit rustybuy
+? help             Show this message
 
 Press any key to dismiss this message.
 ";
@@ -160,6 +163,14 @@ impl App {
                     }
                 }
             },
+            Command::Break(loc) => {
+                if let Some(proc) = self.debugger.as_mut() {
+                    match proc.set_break(loc) {
+                        Ok(s) => info!(id = s, "Added breakpoint"),
+                        Err(e) => error!("Failed to set breakpoint: {}", e),
+                    }
+                }
+            }
             Command::Null => {}
             c => {
                 error!("{:?} is not yet implemented", c);

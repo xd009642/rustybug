@@ -1,3 +1,4 @@
+use crate::commands::Location;
 use crate::process::{Process, Registers};
 use clap::Parser;
 use nix::unistd::Pid;
@@ -90,6 +91,18 @@ impl DebuggerStateMachine {
         }
         let regs = self.root.get_all_registers()?;
         Ok(regs)
+    }
+
+    pub fn set_break(&mut self, location: &Location) -> anyhow::Result<u64> {
+        match location {
+            Location::Address(addr) => {
+                let id = self.root.set_breakpoint(*addr)?;
+                Ok(id)
+            }
+            Location::Line { .. } => {
+                anyhow::bail!("Need to implement file+line breakpoint setting")
+            }
+        }
     }
 }
 

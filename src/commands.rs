@@ -55,6 +55,7 @@ pub enum Command {
     Break(Location),
     Null,
     Print(Expression),
+    ListBreakpoints,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -80,10 +81,11 @@ impl FromStr for Command {
     fn from_str(command: &str) -> Result<Self, Self::Err> {
         match command {
             "q" | "quit" => Ok(Self::Quit),
-            "l" | "logs" => Ok(Self::ToggleLogs),
+            "logs" => Ok(Self::ToggleLogs),
             "?" | "help" => Ok(Self::Help),
             "continue" | "cont" | "c" => Ok(Self::Continue),
             "restart" => Ok(Self::Restart),
+            "list" | "l" => Ok(Self::ListBreakpoints),
             x if x.starts_with("print ") => {
                 let expr_str = x.trim_start_matches("print ");
                 let expr = Expression::from_str(expr_str).map_err(ParseError::InvalidExpression)?;

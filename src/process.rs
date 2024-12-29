@@ -1,3 +1,4 @@
+use crate::breakpoint::*;
 use crate::linux::launch_program;
 use crate::ptrace_control::*;
 use libc::{user_fpregs_struct, user_regs_struct};
@@ -66,6 +67,8 @@ pub enum ProcessError {
     RegisterWriteFailed,
     #[error("couldn't write user fp registers")]
     FpRegisterWriteFailed,
+    #[error("couldn't add breakpoint")]
+    BreakpointSetFailed,
 }
 
 #[derive(Debug)]
@@ -73,6 +76,7 @@ pub struct Process {
     pid: Pid,
     terminate_on_end: bool,
     state: State,
+    breakpoints: Vec<Breakpoint>,
 }
 
 impl Process {
@@ -88,6 +92,7 @@ impl Process {
             pid,
             terminate_on_end: true,
             state: State::Stopped,
+            breakpoints: vec![],
         };
 
         let timeout = Duration::from_secs(15);
@@ -105,6 +110,7 @@ impl Process {
             pid,
             terminate_on_end: false,
             state: State::Stopped,
+            breakpoints: vec![],
         };
 
         let timeout = Duration::from_secs(15);
@@ -126,6 +132,17 @@ impl Process {
 
     pub fn state(&self) -> State {
         self.state
+    }
+
+    pub fn set_breakpoint(&mut self, addr: u64) -> Result<u64, ProcessError> {
+        let bp = Breakpoint::new(self.pid, addr).map_err(|e| {
+            error!("Failed to set breakpoint: {}", e);
+            ProcessError::BreakpointSetFailed
+        })?;
+
+        let id = bp.id;
+        self.breakpoints.push(bp);
+        Ok(id)
     }
 
     pub fn blocking_wait_on_signal(

@@ -3,6 +3,9 @@ use nix::sys::signal::Signal;
 use nix::unistd::Pid;
 use nix::{Error, Result};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct ProcessInfo {
@@ -66,6 +69,7 @@ const INT: u64 = 0xCC;
 /// breakpoint implementations.
 #[derive(Debug)]
 pub struct Breakpoint {
+    pub id: u64,
     /// Program counter
     pub pc: u64,
     /// Bottom byte of address data.
@@ -85,8 +89,10 @@ impl Breakpoint {
         let data = read_address(pid, aligned)?;
         let shift = 8 * (pc - aligned);
         let data = ((data >> shift) & 0xFF) as u8;
+        let id = CURRENT_ID.fetch_add(1, Ordering::SeqCst);
 
         let mut b = Breakpoint {
+            id,
             pc,
             data,
             shift,
