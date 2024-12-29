@@ -5,7 +5,7 @@ place to jot down any notes.
 
 ## Book Spot
 
-Pdf Page 159 book page number 127.
+Pdf Page 185 book page number 153.
 
 ## Current TODO list 
 
@@ -22,6 +22,8 @@ Milestone reached Chapter 7 (breakpoints)
 
 * get and set registers implemented
 * print command implemented (can print all registers currently)
+* Add ID to my breakpoint and hook in commands to set breakpoints
+* Store address offset for PIE executables 
 
 ### 2024-12-28
 

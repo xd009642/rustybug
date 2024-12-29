@@ -6,6 +6,7 @@ use nix::sys::ptrace::{self, regset};
 use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::*;
 use nix::unistd::Pid;
+use procfs::process::{MMapPath, Process as PfsProcess};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -74,6 +75,7 @@ pub enum ProcessError {
 #[derive(Debug)]
 pub struct Process {
     pid: Pid,
+    addr_offset: u64,
     terminate_on_end: bool,
     state: State,
     breakpoints: Vec<Breakpoint>,
@@ -88,8 +90,11 @@ impl Process {
             })?
             .ok_or(ProcessError::NoPid)?;
 
+        let addr_offset = get_addr_offset(pid);
+
         let mut ret = Self {
             pid,
+            addr_offset,
             terminate_on_end: true,
             state: State::Stopped,
             breakpoints: vec![],
@@ -106,8 +111,12 @@ impl Process {
             error!("Failed to attach: {}", e);
             ProcessError::AttachFailed
         })?;
+
+        let addr_offset = get_addr_offset(pid);
+
         let mut ret = Self {
             pid,
+            addr_offset,
             terminate_on_end: false,
             state: State::Stopped,
             breakpoints: vec![],
@@ -135,7 +144,7 @@ impl Process {
     }
 
     pub fn set_breakpoint(&mut self, addr: u64) -> Result<u64, ProcessError> {
-        let bp = Breakpoint::new(self.pid, addr).map_err(|e| {
+        let bp = Breakpoint::new(self.pid, addr + self.addr_offset).map_err(|e| {
             error!("Failed to set breakpoint: {}", e);
             ProcessError::BreakpointSetFailed
         })?;
@@ -271,5 +280,27 @@ impl Drop for Process {
                 }
             }
         }
+    }
+}
+
+fn get_addr_offset(pid: Pid) -> u64 {
+    if let Ok(proc) = PfsProcess::new(pid.as_raw()) {
+        let exe = proc.exe().ok();
+        if let Ok(maps) = proc.maps() {
+            let offset_info = maps.iter().find(|x| match (&x.pathname, exe.as_ref()) {
+                (MMapPath::Path(p), Some(e)) => p == e,
+                (MMapPath::Path(_), None) => true,
+                _ => false,
+            });
+            if let Some(first) = offset_info {
+                first.address.0
+            } else {
+                0
+            }
+        } else {
+            0
+        }
+    } else {
+        0
     }
 }

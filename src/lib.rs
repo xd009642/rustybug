@@ -4,7 +4,7 @@ use clap::Parser;
 use nix::unistd::Pid;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tracing::info;
+use tracing::{debug, info};
 
 pub use crate::process::State;
 
@@ -66,6 +66,8 @@ impl DebuggerStateMachine {
         };
 
         info!(pid=?root.pid(), "program launch.");
+
+        debug!(process=?root);
 
         Ok(Self { root, args })
     }

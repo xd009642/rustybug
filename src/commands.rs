@@ -178,7 +178,7 @@ mod tests {
         assert_eq!(Command::from_str("quit").unwrap(), Command::Quit);
         assert_eq!(Command::from_str("q").unwrap(), Command::Quit);
         assert_eq!(Command::from_str("logs").unwrap(), Command::ToggleLogs);
-        assert_eq!(Command::from_str("l").unwrap(), Command::ToggleLogs);
+        assert_eq!(Command::from_str("l").unwrap(), Command::ListBreakpoints);
         assert_eq!(Command::from_str("help").unwrap(), Command::Help);
         assert_eq!(Command::from_str("?").unwrap(), Command::Help);
         assert_eq!(Command::from_str("restart").unwrap(), Command::Restart);
@@ -191,6 +191,10 @@ mod tests {
             Command::Attach(546)
         );
         assert_eq!(Command::from_str("continue").unwrap(), Command::Continue);
+        assert_eq!(
+            Command::from_str("print registers").unwrap(),
+            Command::Print(Expression::Registers)
+        );
         assert_eq!(Command::from_str("").unwrap(), Command::Null);
     }
 
