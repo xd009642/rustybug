@@ -24,6 +24,7 @@ Milestone reached Chapter 7 (breakpoints)
 * print command implemented (can print all registers currently)
 * Add ID to my breakpoint and hook in commands to set breakpoints
 * Store address offset for PIE executables 
+* Started jotting something down for single step
 
 ### 2024-12-28
 

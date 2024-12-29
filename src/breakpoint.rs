@@ -104,6 +104,11 @@ impl Breakpoint {
         }
     }
 
+    pub fn has_hit(&self, pid: Pid) -> Result<bool> {
+        let pc = current_instruction_pointer(pid)?;
+        Ok(align_address(pc as u64) == self.pc)
+    }
+
     pub fn jump_to(&mut self, pid: Pid) -> Result<()> {
         set_instruction_pointer(pid, self.pc).map(|_| ())
     }

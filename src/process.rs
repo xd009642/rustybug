@@ -56,6 +56,8 @@ pub enum ProcessError {
     WaitFailed,
     #[error("failed to resume process")]
     ContinueFailed,
+    #[error("failed to step forwards")]
+    SingleStepFailed,
     #[error("blocking operation timed out")]
     Timeout,
     #[error("failed to write data")]
@@ -130,8 +132,44 @@ impl Process {
 
     pub fn resume(&mut self) -> Result<(), ProcessError> {
         info!(pid=%self.pid, "Continuing process");
-        continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
+        let mut bps: Vec<&mut Breakpoint> = self
+            .breakpoints
+            .iter_mut()
+            .filter(|bp| bp.has_hit(self.pid).unwrap_or_default())
+            .collect();
+        if bps.len() > 1 {
+            error!("breakpoint clashes: {:?}", bps);
+        }
+        if bps.is_empty() {
+            continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
+        } else {
+            bps[0]
+                .process(self.pid, true)
+                .map_err(|_| ProcessError::ContinueFailed)?;
+            continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
+        }
         self.state = State::Running;
+        Ok(())
+    }
+
+    pub fn step(&mut self) -> Result<(), ProcessError> {
+        let mut bps: Vec<&mut Breakpoint> = self
+            .breakpoints
+            .iter_mut()
+            .filter(|bp| bp.has_hit(self.pid).unwrap_or_default())
+            .collect();
+        if bps.len() > 1 {
+            error!("breakpoint clashes: {:?}", bps);
+        }
+        if bps.is_empty() {
+            single_step(self.pid).map_err(|_| ProcessError::SingleStepFailed)?;
+        } else {
+            bps[0]
+                .process(self.pid, true)
+                .map_err(|_| ProcessError::ContinueFailed)?;
+            single_step(self.pid).map_err(|_| ProcessError::SingleStepFailed)?;
+        }
+        self.state = State::Stopped;
         Ok(())
     }
 
