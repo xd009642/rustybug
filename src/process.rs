@@ -130,16 +130,31 @@ impl Process {
         Ok(ret)
     }
 
+    pub fn pc(&self) -> Result<u64, ProcessError> {
+        current_instruction_pointer(self.pid)
+            .map(|x| (x as u64) - self.addr_offset)
+            .map_err(|e| {
+                error!("Couldn't read PC register: {}", e);
+                ProcessError::RegisterReadFailed
+            })
+    }
+
     pub fn resume(&mut self) -> Result<(), ProcessError> {
         info!(pid=%self.pid, "Continuing process");
-        let mut bps: Vec<&mut Breakpoint> = self.breakpoints.iter_mut().filter(|bp| bp.has_hit(self.pid).unwrap_or_default()).collect();
+        let mut bps: Vec<&mut Breakpoint> = self
+            .breakpoints
+            .iter_mut()
+            .filter(|bp| bp.has_hit(self.pid).unwrap_or_default())
+            .collect();
         if bps.len() > 1 {
             error!("breakpoint clashes: {:?}", bps);
         }
         if bps.is_empty() {
             continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
         } else {
-            bps[0].process(self.pid, true).map_err(|_| ProcessError::ContinueFailed)?;
+            bps[0]
+                .process(self.pid, true)
+                .map_err(|_| ProcessError::ContinueFailed)?;
             continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
         }
         self.state = State::Running;
@@ -147,14 +162,20 @@ impl Process {
     }
 
     pub fn step(&mut self) -> Result<(), ProcessError> {
-        let mut bps: Vec<&mut Breakpoint> = self.breakpoints.iter_mut().filter(|bp| bp.has_hit(self.pid).unwrap_or_default()).collect();
+        let mut bps: Vec<&mut Breakpoint> = self
+            .breakpoints
+            .iter_mut()
+            .filter(|bp| bp.has_hit(self.pid).unwrap_or_default())
+            .collect();
         if bps.len() > 1 {
             error!("breakpoint clashes: {:?}", bps);
         }
         if bps.is_empty() {
             single_step(self.pid).map_err(|_| ProcessError::SingleStepFailed)?;
         } else {
-            bps[0].process(self.pid, true).map_err(|_| ProcessError::ContinueFailed)?;
+            bps[0]
+                .process(self.pid, true)
+                .map_err(|_| ProcessError::ContinueFailed)?;
             single_step(self.pid).map_err(|_| ProcessError::SingleStepFailed)?;
         }
         self.state = State::Stopped;
@@ -178,6 +199,10 @@ impl Process {
         let id = bp.id;
         self.breakpoints.push(bp);
         Ok(id)
+    }
+
+    pub fn breakpoints(&self) -> &[Breakpoint] {
+        self.breakpoints.as_slice()
     }
 
     pub fn blocking_wait_on_signal(

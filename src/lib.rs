@@ -84,6 +84,13 @@ impl DebuggerStateMachine {
         Ok(())
     }
 
+    pub fn step(&mut self) -> anyhow::Result<()> {
+        if self.root.state() == State::Stopped {
+            self.root.step()?;
+        }
+        Ok(())
+    }
+
     pub fn get_registers(&self) -> anyhow::Result<Registers> {
         if self.root.state() != State::Stopped {
             anyhow::bail!(
@@ -104,6 +111,23 @@ impl DebuggerStateMachine {
             Location::Line { .. } => {
                 anyhow::bail!("Need to implement file+line breakpoint setting")
             }
+        }
+    }
+
+    pub fn list_breakpoints(&self) {
+        info!("Breakpoints: {:?}", self.root.breakpoints());
+    }
+
+    pub fn log_status(&self) {
+        let state = self.root.state();
+        if state == State::Stopped {
+            if let Ok(addr) = self.root.pc() {
+                info!("Root process is stopped at {:x}", addr);
+            } else {
+                info!("Root process is stopped at an unknown place");
+            }
+        } else {
+            info!("Root process is {:?}", state);
         }
     }
 }

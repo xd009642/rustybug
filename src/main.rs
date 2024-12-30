@@ -151,6 +151,25 @@ impl App {
                     proc.cont()?;
                 }
             }
+            Command::Step => {
+                if let Some(proc) = self.debugger.as_mut() {
+                    proc.step()?;
+                }
+            }
+            Command::Status => {
+                if let Some(poc) = self.debugger.as_ref() {
+                    poc.log_status();
+                } else {
+                    info!("No process running");
+                }
+            }
+            Command::ListBreakpoints => {
+                if let Some(poc) = self.debugger.as_ref() {
+                    poc.list_breakpoints();
+                } else {
+                    info!("Breakpoints []");
+                }
+            }
             Command::Print(expr) => match expr {
                 Expression::Registers => {
                     if let Some(sm) = self.debugger.as_ref() {

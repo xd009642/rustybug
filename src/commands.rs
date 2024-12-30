@@ -52,10 +52,12 @@ pub enum Command {
     Load(PathBuf),
     Attach(i32),
     Continue,
+    Step,
     Break(Location),
     Null,
     Print(Expression),
     ListBreakpoints,
+    Status,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,6 +86,8 @@ impl FromStr for Command {
             "logs" => Ok(Self::ToggleLogs),
             "?" | "help" => Ok(Self::Help),
             "continue" | "cont" | "c" => Ok(Self::Continue),
+            "step" => Ok(Self::Step),
+            "status" => Ok(Self::Status),
             "restart" => Ok(Self::Restart),
             "list" | "l" => Ok(Self::ListBreakpoints),
             x if x.starts_with("print ") => {
@@ -178,6 +182,7 @@ mod tests {
         assert_eq!(Command::from_str("quit").unwrap(), Command::Quit);
         assert_eq!(Command::from_str("q").unwrap(), Command::Quit);
         assert_eq!(Command::from_str("logs").unwrap(), Command::ToggleLogs);
+        assert_eq!(Command::from_str("status").unwrap(), Command::Status);
         assert_eq!(Command::from_str("l").unwrap(), Command::ListBreakpoints);
         assert_eq!(Command::from_str("help").unwrap(), Command::Help);
         assert_eq!(Command::from_str("?").unwrap(), Command::Help);
@@ -191,6 +196,7 @@ mod tests {
             Command::Attach(546)
         );
         assert_eq!(Command::from_str("continue").unwrap(), Command::Continue);
+        assert_eq!(Command::from_str("step").unwrap(), Command::Step);
         assert_eq!(
             Command::from_str("print registers").unwrap(),
             Command::Print(Expression::Registers)
