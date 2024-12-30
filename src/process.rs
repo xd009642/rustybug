@@ -92,6 +92,10 @@ impl Process {
             })?
             .ok_or(ProcessError::NoPid)?;
 
+        if let Err(e) = trace_children(pid) {
+            error!("Can't follow process children: {}", e);
+        }
+
         let addr_offset = get_addr_offset(pid);
 
         let mut ret = Self {
@@ -113,6 +117,10 @@ impl Process {
             error!("Failed to attach: {}", e);
             ProcessError::AttachFailed
         })?;
+
+        if let Err(e) = trace_children(pid) {
+            error!("Can't follow process children: {}", e);
+        }
 
         let addr_offset = get_addr_offset(pid);
 
