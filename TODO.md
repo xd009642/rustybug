@@ -16,6 +16,11 @@ Pdf Page 185 book page number 153.
 
 ## Diary
 
+### 2024-12-30
+
+* Implement step, status and list-breakpoint commands
+* Very simple breakpoint test
+
 ### 2024-12-29
 
 Milestone reached Chapter 7 (breakpoints)

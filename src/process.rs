@@ -25,7 +25,7 @@ pub struct StopReason {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum Info {
+pub enum Info {
     Signalled(Signal),
     Return(u8),
 }

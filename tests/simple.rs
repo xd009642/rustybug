@@ -1,6 +1,9 @@
 //! In these tests we'll just run a program setting no breakpoints.
 use rusty_fork::rusty_fork_test;
-use rustybug::{process::Process, Args, DebuggerStateMachine, State};
+use rustybug::{
+    process::{Info, Process},
+    Args, DebuggerStateMachine, State,
+};
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -86,24 +89,33 @@ rusty_fork_test! {
     }
 
     #[test]
-    #[ignore]
+    #[traced_test]
+    fn continue_on_entry_breakpoint() {
+        let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
+        proc.set_breakpoint(proc.pc().unwrap()).unwrap();
+        proc.resume();
+        while Some(State::Exited) != proc.wait_on_signal().unwrap().map(|x| x.reason) {
+
+        }
+    }
+
+    #[test]
     #[traced_test]
     fn step_to_end_works() {
         let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
         let mut has_exited = false;
         println!("starting update loop");
-        while !proc.state().is_closed() {
-            if let Some(reason) = proc.wait_on_signal().unwrap() {
-                println!("Stopped: {:?}", reason);
-                if reason.reason == State::Stopped {
-                    proc.step().unwrap();
-                } else if reason.reason == State::Exited {
-                    has_exited = true;
-                }
-            } else {
-                println!("Still going");
-            }
-        }
-        assert!(has_exited, "process didn't exit nicely");
+
+        let pc = proc.pc().unwrap();
+        proc.step().unwrap();
+        proc.blocking_wait_on_signal(Duration::from_secs(1)).unwrap();
+        let new_pc = proc.pc().unwrap();
+        assert!(new_pc > pc);
+
+        proc.resume();
+
+        let stop_reason = proc.blocking_wait_on_signal(Duration::from_secs(1)).unwrap();
+        assert_eq!(stop_reason.info, Info::Return(0));
+        assert_eq!(stop_reason.reason, State::Exited);
     }
 }
