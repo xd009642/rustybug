@@ -10,9 +10,10 @@ Pdf Page 185 book page number 153.
 ## Current TODO list 
 
 * Redivert attached process stdout/stderr
-* Breakpoint setting etc
 * tab autocomplete on commands would be nice
 * Command history not being stringly typed (although it only being valid commands and deduped is maybe nice enough)
+* Breakpoint setting seems to not work as I expect - something might be wonky
+* Go back and do the pipe stuff
 
 ## Diary
 

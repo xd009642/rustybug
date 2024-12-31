@@ -42,7 +42,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let mut terminal = ratatui::init();
-    terminal.hide_cursor();
+    let _ = terminal.hide_cursor();
 
     let mut app = App {
         args,
@@ -76,6 +76,7 @@ pub struct App {
     show_logs: bool,
     current_command: String,
     history_len: usize,
+    current_stdout: String,
     debugger: Option<DebuggerStateMachine>,
     command_history: VecDeque<String>,
     history_index: Option<usize>,
@@ -89,6 +90,11 @@ impl App {
             self.handle_events()?;
 
             if let Some(sm) = self.debugger.as_mut() {
+                if let Some(stdout) = sm.root_process_mut().read_stdout() {
+                    info!("Got stdout: {}", stdout);
+                    self.current_stdout.push_str(&stdout);
+                }
+
                 let state = sm.wait()?;
 
                 if state.is_closed() {
@@ -107,7 +113,7 @@ impl App {
         if self.show_help {
             let area = frame.area();
             let rect = popup_area(area, 80, 60);
-            frame.render_widget(Clear, area);
+            frame.render_widget(Clear, rect);
 
             let block = Block::bordered().title("Help");
 
@@ -191,9 +197,6 @@ impl App {
                 }
             }
             Command::Null => {}
-            c => {
-                error!("{:?} is not yet implemented", c);
-            }
         }
         Ok(())
     }
@@ -244,8 +247,9 @@ impl App {
                         return Ok(());
                     }
                 };
-                self.run_command(&command);
-                if command.store_in_history() && self.history_len > 0 {
+                if let Err(e) = self.run_command(&command) {
+                    error!("Failed to run command: {}", e);
+                } else if command.store_in_history() && self.history_len > 0 {
                     if self.command_history.back() != Some(&command_str) {
                         while self.command_history.len() >= self.history_len.saturating_sub(1) {
                             self.command_history.pop_front();

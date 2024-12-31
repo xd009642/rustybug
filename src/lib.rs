@@ -130,6 +130,10 @@ impl DebuggerStateMachine {
             info!("Root process is {:?}", state);
         }
     }
+
+    pub fn root_process_mut(&mut self) -> &mut Process {
+        &mut self.root
+    }
 }
 
 #[cfg(test)]

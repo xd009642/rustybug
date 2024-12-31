@@ -7,6 +7,7 @@ use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::*;
 use nix::unistd::Pid;
 use procfs::process::{MMapPath, Process as PfsProcess};
+use std::os::fd::{AsRawFd, OwnedFd};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -77,6 +78,7 @@ pub enum ProcessError {
 #[derive(Debug)]
 pub struct Process {
     pid: Pid,
+    stdout_reader: Option<OwnedFd>,
     addr_offset: u64,
     terminate_on_end: bool,
     state: State,
@@ -85,21 +87,25 @@ pub struct Process {
 
 impl Process {
     pub fn launch(path: &Path) -> Result<Self, ProcessError> {
-        let pid = launch_program(path)
+        let handle = launch_program(path)
             .map_err(|e| {
                 error!("Failed to launch: {}", e);
                 ProcessError::LaunchFailed
             })?
             .ok_or(ProcessError::NoPid)?;
 
-        if let Err(e) = trace_children(pid) {
-            error!("Can't follow process children: {}", e);
+        let pid = handle.pid;
+        let stdout_reader = handle.stdout_reader;
+
+        if stdout_reader.is_none() {
+            info!("No handle to process stdout returned");
         }
 
         let addr_offset = get_addr_offset(pid);
 
         let mut ret = Self {
             pid,
+            stdout_reader,
             addr_offset,
             terminate_on_end: true,
             state: State::Stopped,
@@ -108,6 +114,10 @@ impl Process {
 
         let timeout = Duration::from_secs(15);
         ret.blocking_wait_on_signal(timeout)?;
+
+        if let Err(e) = trace_children(pid) {
+            error!("Can't follow process children: {}", e);
+        }
 
         Ok(ret)
     }
@@ -118,14 +128,11 @@ impl Process {
             ProcessError::AttachFailed
         })?;
 
-        if let Err(e) = trace_children(pid) {
-            error!("Can't follow process children: {}", e);
-        }
-
         let addr_offset = get_addr_offset(pid);
 
         let mut ret = Self {
             pid,
+            stdout_reader: None,
             addr_offset,
             terminate_on_end: false,
             state: State::Stopped,
@@ -134,6 +141,10 @@ impl Process {
 
         let timeout = Duration::from_secs(15);
         ret.blocking_wait_on_signal(timeout)?;
+
+        if let Err(e) = trace_children(pid) {
+            error!("Can't follow process children: {}", e);
+        }
 
         Ok(ret)
     }
@@ -307,6 +318,18 @@ impl Process {
             error!("Failed to write fp registers: {}", e);
             ProcessError::FpRegisterWriteFailed
         })
+    }
+
+    pub fn read_stdout(&mut self) -> Option<String> {
+        let reader = self.stdout_reader.as_ref()?;
+        let mut buf = [0u8; 1024];
+        let len = unsafe { libc::read(reader.as_raw_fd(), std::mem::transmute(&mut buf), 1024) };
+        if len > 0 {
+            let string = String::from_utf8_lossy(&buf[..(len as usize)]).into_owned();
+            Some(string)
+        } else {
+            None
+        }
     }
 }
 

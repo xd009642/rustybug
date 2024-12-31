@@ -1,22 +1,49 @@
 use crate::ptrace_control::*;
+use nix::errno::Errno;
 use nix::sys::personality;
 use nix::unistd::*;
 use std::ffi::{CStr, CString};
+use std::io;
+use std::os::fd::OwnedFd;
 use std::path::Path;
 use std::process::Command;
 use tracing::warn;
 
+pub struct LaunchedProcess {
+    pub pid: Pid,
+    pub stdout_reader: Option<OwnedFd>,
+}
+
+/// This is in nix but not yet released on crates.io so should be able to remove it in 0.30.0
+#[inline]
+pub fn dup2_stdout<Fd: std::os::fd::AsFd>(fd: Fd) -> Result<(), Errno> {
+    return Ok(());
+    use libc::STDOUT_FILENO;
+    use std::os::fd::AsRawFd;
+
+    let res = unsafe { libc::dup2(fd.as_fd().as_raw_fd(), STDOUT_FILENO) };
+    Errno::result(res).map(drop)
+}
+
 /// Returns the coverage statistics for a test executable in the given workspace
-pub fn launch_program(exe: &Path) -> anyhow::Result<Option<Pid>> {
+pub fn launch_program(exe: &Path) -> anyhow::Result<Option<LaunchedProcess>> {
     if !exe.exists() {
         warn!("Test at {} doesn't exist", exe.display());
         return Ok(None);
     }
 
+    //  let (read, write) = pipe()?;
+
     unsafe {
         match fork() {
-            Ok(ForkResult::Parent { child }) => Ok(Some(child)),
+            Ok(ForkResult::Parent { child }) => Ok(Some(LaunchedProcess {
+                pid: child,
+                stdout_reader: None,
+            })),
             Ok(ForkResult::Child) => {
+                //    if let Err(e) = dup2_stdout(&write) {
+                //        warn!("Failed to redirect stdout");
+                //    }
                 execute(exe, &[], &[])?;
                 Ok(None)
             }
