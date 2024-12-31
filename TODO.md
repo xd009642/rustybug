@@ -5,7 +5,7 @@ place to jot down any notes.
 
 ## Book Spot
 
-Pdf Page 185 book page number 153.
+Pdf Page 271 book page number 239.
 
 ## Current TODO list 
 
@@ -18,6 +18,7 @@ Pdf Page 185 book page number 153.
 * disassembly (chapter 8)
 * hardware breakpoints - for watching variables changing (chapter 9)
 * Fix whatever is wrong with my offsetting...
+* Better API around siginfo in https://github.com/nix-rust/nix 
 
 ## Diary
 
@@ -26,6 +27,8 @@ Pdf Page 185 book page number 153.
 * So redirecting process output to the pipe isn't working like I'd hoped. I think it's the fork...
 * Fix issue where I was waiting on ptrace events in wrong place and made them enable-able (not exposed via command API)
 * CTRL+C now stops inferior process
+* Trap reason is now stored - and relevant libc PR opened [here](https://github.com/rust-lang/libc/pull/4225) 
+    * A nicer API in https://github.com/nix-rust/nix would be nice
 
 ### 2024-12-30
 
