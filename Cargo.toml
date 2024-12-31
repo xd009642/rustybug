@@ -9,7 +9,7 @@ clap = { version = "4.5.21", features = ["derive"] }
 crossterm = "0.28.1"
 gimli = "0.31.1"
 libc = "0.2.164"
-nix = { version = "0.29.0", features = ["sched", "ptrace", "signal", "personality"] }
+nix = { version = "0.29.0", features = ["fs", "sched", "ptrace", "signal", "personality"] }
 num_cpus = "1.16.0"
 object = "0.36.5"
 procfs = "0.17.0"

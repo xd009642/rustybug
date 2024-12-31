@@ -2,6 +2,7 @@ use crate::breakpoint::*;
 use crate::linux::launch_program;
 use crate::ptrace_control::*;
 use libc::{user_fpregs_struct, user_regs_struct};
+use nix::errno::Errno;
 use nix::sys::ptrace::{self, regset};
 use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::*;
@@ -20,9 +21,36 @@ pub struct Registers {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Event {
+    Exit,
+    Exec,
+    Fork,
+    Vfork,
+    Spawn,
+}
+
+impl TryFrom<i32> for Event {
+    type Error = Errno;
+
+    fn try_from(event: i32) -> Result<Self, Self::Error> {
+        // Hmm need a way to get PID into this if I want to use try_from and also report the new
+        // spawned/forked children PIDs
+        match event {
+            PTRACE_EVENT_CLONE => Ok(Self::Spawn),
+            PTRACE_EVENT_FORK => Ok(Self::Fork),
+            PTRACE_EVENT_VFORK => Ok(Self::Vfork),
+            PTRACE_EVENT_EXEC => Ok(Self::Exec),
+            PTRACE_EVENT_EXIT => Ok(Self::Exit),
+            _ => Err(Errno::UnknownErrno),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct StopReason {
     pub reason: State,
     pub info: Info,
+    pub event: Option<Event>,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -115,10 +143,6 @@ impl Process {
         let timeout = Duration::from_secs(15);
         ret.blocking_wait_on_signal(timeout)?;
 
-        if let Err(e) = trace_children(pid) {
-            error!("Can't follow process children: {}", e);
-        }
-
         Ok(ret)
     }
 
@@ -142,10 +166,6 @@ impl Process {
         let timeout = Duration::from_secs(15);
         ret.blocking_wait_on_signal(timeout)?;
 
-        if let Err(e) = trace_children(pid) {
-            error!("Can't follow process children: {}", e);
-        }
-
         Ok(ret)
     }
 
@@ -156,6 +176,12 @@ impl Process {
                 error!("Couldn't read PC register: {}", e);
                 ProcessError::RegisterReadFailed
             })
+    }
+
+    pub fn stop_on_events(&self) {
+        if let Err(e) = trace_children(self.pid) {
+            error!("Won't stop when a child forks/clones/execs: {}", e);
+        }
     }
 
     pub fn resume(&mut self) -> Result<(), ProcessError> {
@@ -247,6 +273,7 @@ impl Process {
                 ret = Some(StopReason {
                     reason: State::Exited,
                     info: Info::Return(ret_code as u8),
+                    event: None,
                 });
                 if child == self.pid {
                     info!("Process {:?} exited with exit code {}", child, ret_code);
@@ -260,6 +287,7 @@ impl Process {
                 ret = Some(StopReason {
                     reason: State::Stopped,
                     info: Info::Signalled(signal),
+                    event: None,
                 });
                 State::Stopped
             }
@@ -267,10 +295,26 @@ impl Process {
                 ret = Some(StopReason {
                     reason: State::Terminated,
                     info: Info::Signalled(signal),
+                    event: None,
                 });
                 State::Terminated
             }
-            _ => unimplemented!(),
+            WaitStatus::PtraceEvent(pid, signal, event) => {
+                let event = match Event::try_from(event) {
+                    Ok(e) => Some(e),
+                    Err(e) => {
+                        error!("Failed to extract ptrace event from {}: {}", event, e);
+                        None
+                    }
+                };
+                ret = Some(StopReason {
+                    reason: State::Stopped,
+                    info: Info::Signalled(signal),
+                    event,
+                });
+                State::Stopped
+            }
+            sig => unimplemented!("{:?}", sig),
         };
         self.state = state;
         Ok(ret)

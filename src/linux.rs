@@ -1,5 +1,6 @@
 use crate::ptrace_control::*;
 use nix::errno::Errno;
+use nix::fcntl::OFlag;
 use nix::sys::personality;
 use nix::unistd::*;
 use std::ffi::{CStr, CString};
@@ -17,7 +18,6 @@ pub struct LaunchedProcess {
 /// This is in nix but not yet released on crates.io so should be able to remove it in 0.30.0
 #[inline]
 pub fn dup2_stdout<Fd: std::os::fd::AsFd>(fd: Fd) -> Result<(), Errno> {
-    return Ok(());
     use libc::STDOUT_FILENO;
     use std::os::fd::AsRawFd;
 
@@ -32,18 +32,19 @@ pub fn launch_program(exe: &Path) -> anyhow::Result<Option<LaunchedProcess>> {
         return Ok(None);
     }
 
-    //  let (read, write) = pipe()?;
+    let (read, write) = pipe2(OFlag::O_CLOEXEC)?;
 
     unsafe {
         match fork() {
             Ok(ForkResult::Parent { child }) => Ok(Some(LaunchedProcess {
                 pid: child,
-                stdout_reader: None,
+                stdout_reader: Some(read),
             })),
             Ok(ForkResult::Child) => {
-                //    if let Err(e) = dup2_stdout(&write) {
-                //        warn!("Failed to redirect stdout");
-                //    }
+                std::mem::drop(read);
+                /*if let Err(e) = dup2_stdout(&write) {
+                    warn!("Failed to redirect stdout");
+                }*/
                 execute(exe, &[], &[])?;
                 Ok(None)
             }
@@ -67,8 +68,8 @@ fn is_aslr_enabled() -> bool {
     // Convert the output to a String and store it in a variable
     let output_str = String::from_utf8(output.stdout).unwrap();
 
-    // Check if the output string is not '0' (case-insensitive) and return the result
-    output_str.trim().to_lowercase() != "0"
+    // Check if the output string is not '0' and return the result
+    output_str.trim() != "0"
 }
 
 pub fn execute(test: &Path, argv: &[String], envar: &[(String, String)]) -> anyhow::Result<Pid> {
