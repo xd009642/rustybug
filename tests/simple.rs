@@ -1,7 +1,7 @@
 //! In these tests we'll just run a program setting no breakpoints.
 use rusty_fork::rusty_fork_test;
 use rustybug::{
-    process::{Event, Info, Process},
+    process::{Event, Info, Process, ProcessError},
     Args, DebuggerStateMachine, State,
 };
 use std::path::Path;
@@ -137,5 +137,20 @@ rusty_fork_test! {
         assert_eq!(reason.event, None);
         assert_eq!(reason.reason, State::Exited);
         assert_eq!(reason.info, Info::Return(0));
+    }
+    
+    #[test]
+    #[traced_test]
+    fn can_stop_process() {
+
+        let mut proc = Process::launch(Path::new("tests/data/apps/build/dont_stop")).unwrap();
+
+        proc.resume().unwrap();
+
+        assert_eq!(proc.blocking_wait_on_signal(Duration::from_secs(1)), Err(ProcessError::Timeout));
+
+        proc.stop().unwrap();
+
+        assert!(proc.blocking_wait_on_signal(Duration::from_secs(1)).is_ok());
     }
 }
