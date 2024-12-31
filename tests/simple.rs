@@ -1,7 +1,7 @@
 //! In these tests we'll just run a program setting no breakpoints.
 use rusty_fork::rusty_fork_test;
 use rustybug::{
-    process::{Info, Process},
+    process::{Event, Info, Process},
     Args, DebuggerStateMachine, State,
 };
 use std::path::Path;
@@ -32,6 +32,8 @@ rusty_fork_test! {
             while State::Exited != sm.wait().unwrap() {
 
             }
+
+            assert!(sm.wait().is_err());
         }
     }
 
@@ -93,7 +95,7 @@ rusty_fork_test! {
     fn continue_on_entry_breakpoint() {
         let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
         proc.set_breakpoint(proc.pc().unwrap()).unwrap();
-        proc.resume();
+        proc.resume().unwrap();
         while Some(State::Exited) != proc.wait_on_signal().unwrap().map(|x| x.reason) {
 
         }
@@ -103,8 +105,6 @@ rusty_fork_test! {
     #[traced_test]
     fn step_to_end_works() {
         let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
-        let mut has_exited = false;
-        println!("starting update loop");
 
         let pc = proc.pc().unwrap();
         proc.step().unwrap();
@@ -112,10 +112,30 @@ rusty_fork_test! {
         let new_pc = proc.pc().unwrap();
         assert!(new_pc > pc);
 
-        proc.resume();
+        proc.resume().unwrap();
 
         let stop_reason = proc.blocking_wait_on_signal(Duration::from_secs(1)).unwrap();
         assert_eq!(stop_reason.info, Info::Return(0));
         assert_eq!(stop_reason.reason, State::Exited);
+    }
+
+    #[test]
+    #[traced_test]
+    fn stop_on_events() {
+        let mut proc = Process::launch(Path::new("tests/data/apps/build/test_project")).unwrap();
+
+        proc.stop_on_events();
+        proc.resume().unwrap();
+
+        let reason =  proc.blocking_wait_on_signal(Duration::from_secs(1)).unwrap();
+
+        assert_eq!(reason.event, Some(Event::Exit));
+
+        proc.resume().unwrap();
+
+        let reason =  proc.blocking_wait_on_signal(Duration::from_secs(1)).unwrap();
+        assert_eq!(reason.event, None);
+        assert_eq!(reason.reason, State::Exited);
+        assert_eq!(reason.info, Info::Return(0));
     }
 }

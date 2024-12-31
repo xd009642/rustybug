@@ -14,8 +14,18 @@ Pdf Page 185 book page number 153.
 * Command history not being stringly typed (although it only being valid commands and deduped is maybe nice enough)
 * Breakpoint setting seems to not work as I expect - something might be wonky
 * Go back and do the pipe stuff
+* read and write memory commands (chapter 8)
+* disassembly (chapter 8)
+* hardware breakpoints - for watching variables changing (chapter 9)
+* Fix whatever is wrong with my offsetting...
 
 ## Diary
+
+### 2024-12-31
+
+* So redirecting process output to the pipe isn't working like I'd hoped. I think it's the fork...
+* Fix issue where I was waiting on ptrace events in wrong place and made them enable-able (not exposed via command API)
+* CTRL+C now stops inferior process
 
 ### 2024-12-30
 

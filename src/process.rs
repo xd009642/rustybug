@@ -33,12 +33,13 @@ impl TryFrom<i32> for Event {
     type Error = Errno;
 
     fn try_from(event: i32) -> Result<Self, Self::Error> {
+        use nix::libc::*;
         // Hmm need a way to get PID into this if I want to use try_from and also report the new
         // spawned/forked children PIDs
         match event {
-            PTRACE_EVENT_CLONE => Ok(Self::Spawn),
             PTRACE_EVENT_FORK => Ok(Self::Fork),
             PTRACE_EVENT_VFORK => Ok(Self::Vfork),
+            PTRACE_EVENT_CLONE => Ok(Self::Spawn),
             PTRACE_EVENT_EXEC => Ok(Self::Exec),
             PTRACE_EVENT_EXIT => Ok(Self::Exit),
             _ => Err(Errno::UnknownErrno),
@@ -101,6 +102,8 @@ pub enum ProcessError {
     FpRegisterWriteFailed,
     #[error("couldn't add breakpoint")]
     BreakpointSetFailed,
+    #[error("couldn't use kill syscall on process")]
+    KillFailed,
 }
 
 #[derive(Debug)]
@@ -169,9 +172,17 @@ impl Process {
         Ok(ret)
     }
 
+    pub fn stop(&self) -> Result<(), ProcessError> {
+        kill(self.pid, Signal::SIGSTOP).map_err(|e| {
+            error!("Couldn't stop process: {}", e);
+            ProcessError::KillFailed
+        })
+    }
+
     pub fn pc(&self) -> Result<u64, ProcessError> {
         current_instruction_pointer(self.pid)
-            .map(|x| (x as u64) - self.addr_offset)
+            // .map(|x| (x as u64) - self.addr_offset)
+            .map(|x| x as u64)
             .map_err(|e| {
                 error!("Couldn't read PC register: {}", e);
                 ProcessError::RegisterReadFailed
@@ -236,7 +247,7 @@ impl Process {
     }
 
     pub fn set_breakpoint(&mut self, addr: u64) -> Result<u64, ProcessError> {
-        let bp = Breakpoint::new(self.pid, addr + self.addr_offset).map_err(|e| {
+        let bp = Breakpoint::new(self.pid, addr /* + self.addr_offset */).map_err(|e| {
             error!("Failed to set breakpoint: {}", e);
             ProcessError::BreakpointSetFailed
         })?;

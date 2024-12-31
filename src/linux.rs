@@ -74,6 +74,9 @@ fn is_aslr_enabled() -> bool {
 
 pub fn execute(test: &Path, argv: &[String], envar: &[(String, String)]) -> anyhow::Result<Pid> {
     let program = CString::new(test.display().to_string()).unwrap_or_default();
+    if let Err(e) = setpgid(Pid::from_raw(0), Pid::from_raw(0)) {
+        warn!("Failed to set pgid: {}", e);
+    }
     if is_aslr_enabled() {
         disable_aslr()?;
     }

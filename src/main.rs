@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
@@ -130,6 +130,9 @@ impl App {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
                 self.handle_key_event(key_event)
             }
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Release => {
+                self.handle_key_event(key_event)
+            }
             _ => Ok(()),
         }
     }
@@ -206,65 +209,74 @@ impl App {
             self.show_help = false;
             return Ok(());
         }
-        match key_event.code {
-            KeyCode::Char(c) => {
-                self.current_command.push(c);
-            }
-            KeyCode::Down => match self.history_index.as_mut() {
-                Some(index) if *index + 1 >= self.command_history.len() => {
-                    self.current_command.clear();
-                    self.history_index = None;
-                }
-                Some(index) => {
-                    *index += 1;
-                    if let Some(command) = self.command_history.get(*index) {
-                        self.current_command = command.clone();
-                    }
-                }
-                None => {}
-            },
-            KeyCode::Up => {
-                if let Some(index) = self.history_index.as_mut() {
-                    *index = index.saturating_sub(1);
-                    if let Some(command) = self.command_history.get(*index) {
-                        self.current_command = command.clone();
-                    }
-                } else {
-                    if let Some(history) = self.command_history.back() {
-                        self.current_command = history.clone();
-                        self.history_index = Some(self.command_history.len() - 1);
-                    }
+        if key_event.modifiers == KeyModifiers::CONTROL {
+            if key_event.code == KeyCode::Char('c') {
+                if let Some(debugger) = self.debugger.as_ref() {
+                    info!("Sending stop to child process");
+                    let _ = debugger.root_process().stop();
                 }
             }
-            KeyCode::Enter => {
-                let mut command_str = String::new();
-                std::mem::swap(&mut command_str, &mut self.current_command);
-                let command = match Command::from_str(&command_str) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        error!("Invalid command: {}", e);
-                        // We don't need to bubble these errors up.
-                        return Ok(());
+        } else {
+            match key_event.code {
+                KeyCode::Char(c) => {
+                    self.current_command.push(c);
+                }
+                KeyCode::Down => match self.history_index.as_mut() {
+                    Some(index) if *index + 1 >= self.command_history.len() => {
+                        self.current_command.clear();
+                        self.history_index = None;
                     }
-                };
-                if let Err(e) = self.run_command(&command) {
-                    error!("Failed to run command: {}", e);
-                } else if command.store_in_history() && self.history_len > 0 {
-                    if self.command_history.back() != Some(&command_str) {
-                        while self.command_history.len() >= self.history_len.saturating_sub(1) {
-                            self.command_history.pop_front();
+                    Some(index) => {
+                        *index += 1;
+                        if let Some(command) = self.command_history.get(*index) {
+                            self.current_command = command.clone();
                         }
-                        // So this will put nonsense onto the history we should actually parse into proper
-                        // commands
-                        self.command_history.push_back(command_str);
+                    }
+                    None => {}
+                },
+                KeyCode::Up => {
+                    if let Some(index) = self.history_index.as_mut() {
+                        *index = index.saturating_sub(1);
+                        if let Some(command) = self.command_history.get(*index) {
+                            self.current_command = command.clone();
+                        }
+                    } else {
+                        if let Some(history) = self.command_history.back() {
+                            self.current_command = history.clone();
+                            self.history_index = Some(self.command_history.len() - 1);
+                        }
                     }
                 }
+                KeyCode::Enter => {
+                    let mut command_str = String::new();
+                    std::mem::swap(&mut command_str, &mut self.current_command);
+                    let command = match Command::from_str(&command_str) {
+                        Ok(c) => c,
+                        Err(e) => {
+                            error!("Invalid command: {}", e);
+                            // We don't need to bubble these errors up.
+                            return Ok(());
+                        }
+                    };
+                    if let Err(e) = self.run_command(&command) {
+                        error!("Failed to run command: {}", e);
+                    } else if command.store_in_history() && self.history_len > 0 {
+                        if self.command_history.back() != Some(&command_str) {
+                            while self.command_history.len() >= self.history_len.saturating_sub(1) {
+                                self.command_history.pop_front();
+                            }
+                            // So this will put nonsense onto the history we should actually parse into proper
+                            // commands
+                            self.command_history.push_back(command_str);
+                        }
+                    }
+                }
+                KeyCode::Esc => self.current_command.clear(),
+                KeyCode::Backspace => {
+                    self.current_command.pop();
+                }
+                _ => {}
             }
-            KeyCode::Esc => self.current_command.clear(),
-            KeyCode::Backspace => {
-                self.current_command.pop();
-            }
-            _ => {}
         }
         Ok(())
     }

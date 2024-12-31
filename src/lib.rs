@@ -131,6 +131,10 @@ impl DebuggerStateMachine {
         }
     }
 
+    pub fn root_process(&self) -> &Process {
+        &self.root
+    }
+
     pub fn root_process_mut(&mut self) -> &mut Process {
         &mut self.root
     }
