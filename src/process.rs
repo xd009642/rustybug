@@ -1,7 +1,7 @@
 use crate::breakpoint::*;
 use crate::linux::launch_program;
 use crate::ptrace_control::*;
-use libc::{user_fpregs_struct, user_regs_struct};
+use libc::{c_int, user_fpregs_struct, user_regs_struct};
 use nix::errno::Errno;
 use nix::sys::ptrace::{self, regset};
 use nix::sys::signal::{kill, Signal};
@@ -18,6 +18,13 @@ use tracing::{error, info, warn};
 pub struct Registers {
     pub regs: user_regs_struct,
     pub fpregs: user_fpregs_struct,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum TrapType {
+    SingleStep,
+    SoftwareBreak,
+    HardwareBreak,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -52,6 +59,18 @@ pub struct StopReason {
     pub reason: State,
     pub info: Info,
     pub event: Option<Event>,
+    pub trap_reason: Option<TrapType>,
+}
+
+impl StopReason {
+    fn new(reason: State, info: Info) -> Self {
+        Self {
+            reason,
+            info,
+            event: None,
+            trap_reason: None,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -281,11 +300,7 @@ impl Process {
         {
             WaitStatus::StillAlive => self.state,
             sig @ WaitStatus::Exited(child, ret_code) => {
-                ret = Some(StopReason {
-                    reason: State::Exited,
-                    info: Info::Return(ret_code as u8),
-                    event: None,
-                });
+                ret = Some(StopReason::new(State::Exited, Info::Return(ret_code as u8)));
                 if child == self.pid {
                     info!("Process {:?} exited with exit code {}", child, ret_code);
                     self.pid = Pid::from_raw(0);
@@ -295,19 +310,11 @@ impl Process {
                 }
             }
             WaitStatus::Stopped(child, signal) => {
-                ret = Some(StopReason {
-                    reason: State::Stopped,
-                    info: Info::Signalled(signal),
-                    event: None,
-                });
+                ret = Some(StopReason::new(State::Stopped, Info::Signalled(signal)));
                 State::Stopped
             }
             WaitStatus::Signaled(pid, signal, has_coredump) => {
-                ret = Some(StopReason {
-                    reason: State::Terminated,
-                    info: Info::Signalled(signal),
-                    event: None,
-                });
+                ret = Some(StopReason::new(State::Terminated, Info::Signalled(signal)));
                 State::Terminated
             }
             WaitStatus::PtraceEvent(pid, signal, event) => {
@@ -318,15 +325,31 @@ impl Process {
                         None
                     }
                 };
-                ret = Some(StopReason {
-                    reason: State::Stopped,
-                    info: Info::Signalled(signal),
-                    event,
-                });
+                let mut reason = StopReason::new(State::Stopped, Info::Signalled(signal));
+                reason.event = event;
+                ret = Some(reason);
                 State::Stopped
             }
             sig => unimplemented!("{:?}", sig),
         };
+        if let Some(ret) = ret.as_mut() {
+            match ptrace::getsiginfo(self.pid) {
+                Ok(sig_info) => {
+                    pub const TRAP_TRACE: c_int = 2;
+                    pub const TRAP_HWBKPT: c_int = 4;
+                    pub const SI_KERNEL: c_int = 0x80;
+                    ret.trap_reason = match sig_info.si_code {
+                        TRAP_TRACE => Some(TrapType::SingleStep),
+                        SI_KERNEL => Some(TrapType::SoftwareBreak),
+                        TRAP_HWBKPT => Some(TrapType::HardwareBreak),
+                        _ => None,
+                    };
+                }
+                Err(e) => {
+                    warn!("Couldn't get sig info: {}", e);
+                }
+            }
+        }
         self.state = state;
         Ok(ret)
     }

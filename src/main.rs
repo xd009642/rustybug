@@ -95,12 +95,15 @@ impl App {
                     self.current_stdout.push_str(&stdout);
                 }
 
-                let state = sm.wait()?;
+                let stop = sm.wait()?;
 
-                if state.is_closed() {
-                    self.debugger = None;
-                    info!("Done");
-                    //self.exit();
+                if let Some(stop) = stop {
+                    if stop.reason.is_closed() {
+                        self.debugger = None;
+                        info!("Done");
+                    } else {
+                        info!("Stopped: {:?}", stop);
+                    }
                 }
             }
         }

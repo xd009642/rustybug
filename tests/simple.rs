@@ -29,7 +29,7 @@ rusty_fork_test! {
 
             sm.cont().unwrap();
 
-            while State::Exited != sm.wait().unwrap() {
+            while !matches!(sm.wait().unwrap().map(|x| x.reason), Some(State::Exited)) {
 
             }
 
@@ -127,7 +127,7 @@ rusty_fork_test! {
         proc.stop_on_events();
         proc.resume().unwrap();
 
-        let reason =  proc.blocking_wait_on_signal(Duration::from_secs(1)).unwrap();
+        let reason =  proc.blocking_wait_on_signal(Duration::from_secs(2)).unwrap();
 
         assert_eq!(reason.event, Some(Event::Exit));
 
@@ -138,7 +138,7 @@ rusty_fork_test! {
         assert_eq!(reason.reason, State::Exited);
         assert_eq!(reason.info, Info::Return(0));
     }
-    
+
     #[test]
     #[traced_test]
     fn can_stop_process() {

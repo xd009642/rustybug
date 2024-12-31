@@ -1,5 +1,5 @@
 use crate::commands::Location;
-use crate::process::{Process, Registers};
+use crate::process::{Process, Registers, StopReason};
 use clap::Parser;
 use nix::unistd::Pid;
 use std::path::PathBuf;
@@ -72,9 +72,8 @@ impl DebuggerStateMachine {
         Ok(Self { root, args })
     }
 
-    pub fn wait(&mut self) -> anyhow::Result<State> {
-        self.root.wait_on_signal()?;
-        Ok(self.root.state())
+    pub fn wait(&mut self) -> anyhow::Result<Option<StopReason>> {
+        Ok(self.root.wait_on_signal()?)
     }
 
     pub fn cont(&mut self) -> anyhow::Result<()> {
