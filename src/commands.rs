@@ -23,8 +23,6 @@ pub enum ParseError {
 pub enum LocationError {
     #[error("unknown source location")]
     UnknownSourceLocation,
-    #[error("couldn't parse address")]
-    CouldntParseAddress,
     #[error("couldn't parse address, invalid hexadecimal")]
     InvalidHexAddress,
     #[error("invalid line number")]
@@ -75,6 +73,7 @@ impl Command {
 pub enum Location {
     Address(u64),
     Line { file: PathBuf, line: usize },
+    Function(String),
 }
 
 impl FromStr for Command {
@@ -131,21 +130,21 @@ impl FromStr for Location {
         let args = location.split_whitespace().collect::<Vec<&str>>();
         if args.len() == 1 {
             let addr = args[0];
-            let addr = if addr.starts_with("0x") {
+            if addr.starts_with("0x") {
                 let hex_addr = addr.strip_prefix("0x").unwrap();
                 let addr = u64::from_str_radix(hex_addr, 16).map_err(|e| {
                     error!("Invalid hexadecimal: {}", e);
                     LocationError::InvalidHexAddress
                 })?;
-                addr
+                Ok(Location::Address(addr))
             } else {
-                let addr = addr.parse::<u64>().map_err(|e| {
-                    error!("Invalid integral address");
-                    LocationError::CouldntParseAddress
-                })?;
-                addr
-            };
-            Ok(Location::Address(addr))
+                let addr = addr.parse::<u64>();
+                if let Ok(addr) = addr {
+                    Ok(Location::Address(addr))
+                } else {
+                    Ok(Location::Function(args[0].to_string()))
+                }
+            }
         } else if args.len() == 2 {
             let file = PathBuf::from(args[0]);
             let line = args[1].parse::<usize>().map_err(|e| {
@@ -202,6 +201,10 @@ mod tests {
             Command::Print(Expression::Registers)
         );
         assert_eq!(Command::from_str("").unwrap(), Command::Null);
+        assert_eq!(
+            Command::from_str("break main").unwrap(),
+            Command::Break(Location::Function("main".to_string()))
+        );
     }
 
     #[test]
@@ -213,12 +216,6 @@ mod tests {
         assert_eq!(
             Command::from_str("dance"),
             Err(ParseError::InvalidCommand("dance".to_string()))
-        );
-        assert_eq!(
-            Command::from_str("break main.rs"),
-            Err(ParseError::InvalidLocation(
-                LocationError::CouldntParseAddress
-            ))
         );
         assert_eq!(
             Command::from_str("break 1 main.rs"),

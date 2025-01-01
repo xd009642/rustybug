@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.93"
 clap = { version = "4.5.21", features = ["derive"] }
+cpp_demangle = "0.4.4"
 crossterm = "0.28.1"
 gimli = "0.31.1"
 libc = "0.2.164"

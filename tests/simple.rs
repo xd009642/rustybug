@@ -27,6 +27,8 @@ rusty_fork_test! {
             };
             let mut sm = DebuggerStateMachine::start(args).unwrap();
 
+            assert!(sm.has_elf_file());
+
             sm.cont().unwrap();
 
             while !matches!(sm.wait().unwrap().map(|x| x.reason), Some(State::Exited)) {

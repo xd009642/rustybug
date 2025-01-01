@@ -1,3 +1,4 @@
+use crate::commands::Location;
 use object::{
     read::{ObjectSection, ReadCache, ReadRef},
     Object,
@@ -27,6 +28,8 @@ pub enum ElfError {
     CantOpenElf,
     #[error("couldn't parse ELF file")]
     CouldntParse,
+    #[error("couldn't find location in ELF file")]
+    BadLocation,
 }
 
 #[derive(Debug)]
@@ -64,5 +67,13 @@ impl Elf {
             })?;
 
         Ok(Elf { elf_file })
+    }
+
+    pub fn get_address(&self, location: Location) -> Result<u64, ElfError> {
+        match location {
+            Location::Address(addr) => Ok(addr),
+            Location::Line { file, line } => todo!(),
+            Location::Function(fn_name) => todo!(),
+        }
     }
 }

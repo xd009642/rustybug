@@ -118,6 +118,9 @@ impl DebuggerStateMachine {
             Location::Line { .. } => {
                 anyhow::bail!("Need to implement file+line breakpoint setting")
             }
+            Location::Function(fn_name) => {
+                anyhow::bail!("Need to implement breakpoints on function names")
+            }
         }
     }
 
@@ -144,6 +147,10 @@ impl DebuggerStateMachine {
 
     pub fn root_process_mut(&mut self) -> &mut Process {
         &mut self.root
+    }
+
+    pub fn has_elf_file(&self) -> bool {
+        self.elf.is_some()
     }
 }
 
