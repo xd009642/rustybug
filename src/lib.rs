@@ -1,16 +1,16 @@
 use crate::commands::Location;
+use crate::elf::Elf;
 use crate::process::{Process, Registers, StopReason};
 use clap::Parser;
 use nix::unistd::Pid;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub use crate::process::State;
 
 pub mod breakpoint;
 pub mod commands;
-//pub mod test_loader;
+pub mod elf;
 pub mod linux;
 pub mod process;
 pub mod ptrace_control;
@@ -51,16 +51,24 @@ impl Args {
 #[derive(Debug)]
 pub struct DebuggerStateMachine {
     root: Process,
+    elf: Option<Elf>,
     args: Args,
 }
 
 impl DebuggerStateMachine {
     pub fn start(args: Args) -> anyhow::Result<Self> {
-        let mut root = if let Some(input) = args.input.as_ref() {
-            Process::launch(input)?
+        let (mut root, elf) = if let Some(input) = args.input.as_ref() {
+            let elf = match Elf::load(input) {
+                Ok(elf) => Some(elf),
+                Err(e) => {
+                    warn!("Failed to load elf file: {}", e);
+                    None
+                }
+            };
+            (Process::launch(input)?, elf)
         } else if let Some(pid) = args.pid {
             let pid = Pid::from_raw(pid);
-            Process::attach(pid)?
+            (Process::attach(pid)?, None)
         } else {
             panic!("You should provide an executable name or PID");
         };
@@ -69,7 +77,7 @@ impl DebuggerStateMachine {
 
         debug!(process=?root);
 
-        Ok(Self { root, args })
+        Ok(Self { root, elf, args })
     }
 
     pub fn wait(&mut self) -> anyhow::Result<Option<StopReason>> {
