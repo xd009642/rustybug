@@ -22,6 +22,12 @@ Pdf Page 271 book page number 239.
 
 ## Diary
 
+### 2025-01-01
+
+Milestone: New years day!
+
+* So I think I solved my elf file woes but we'll see...
+
 ### 2024-12-31
 
 * So redirecting process output to the pipe isn't working like I'd hoped. I think it's the fork...
