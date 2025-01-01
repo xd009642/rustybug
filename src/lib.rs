@@ -1,5 +1,5 @@
 use crate::commands::Location;
-use crate::elf::Elf;
+use crate::elf::ExecutableFile;
 use crate::process::{Process, Registers, StopReason};
 use clap::Parser;
 use nix::unistd::Pid;
@@ -51,14 +51,14 @@ impl Args {
 #[derive(Debug)]
 pub struct DebuggerStateMachine {
     root: Process,
-    elf: Option<Elf>,
+    elf: Option<ExecutableFile>,
     args: Args,
 }
 
 impl DebuggerStateMachine {
     pub fn start(args: Args) -> anyhow::Result<Self> {
         let (mut root, elf) = if let Some(input) = args.input.as_ref() {
-            let elf = match Elf::load(input) {
+            let elf = match ExecutableFile::load(input) {
                 Ok(elf) => Some(elf),
                 Err(e) => {
                     warn!("Failed to load elf file: {}", e);

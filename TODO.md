@@ -19,6 +19,7 @@ Pdf Page 271 book page number 239.
 * hardware breakpoints - for watching variables changing (chapter 9)
 * Fix whatever is wrong with my offsetting...
 * Better API around siginfo in https://github.com/nix-rust/nix 
+* memory mapped ELF files to avoid loading a bunch of big executables when not a lot of them might be parsed
 
 ## Diary
 
@@ -27,6 +28,7 @@ Pdf Page 271 book page number 239.
 Milestone: New years day!
 
 * So I think I solved my elf file woes but we'll see...
+* Load and store DWARF sections and ELF file
 
 ### 2024-12-31
 

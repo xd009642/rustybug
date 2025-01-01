@@ -1,4 +1,5 @@
 use crate::commands::Location;
+use gimli::{DebugAbbrev, DebugInfo, DebugLine, DebugStr, EndianSlice, RunTimeEndian};
 use object::{
     read::{ObjectSection, ReadCache, ReadRef},
     Object,
@@ -22,7 +23,7 @@ use tracing::{debug, error, trace, warn};
 static LOADED_FILES: LazyLock<RwLock<HashMap<PathBuf, Arc<Vec<u8>>>>> =
     LazyLock::new(|| Default::default());
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
+#[derive(Debug, Error)]
 pub enum ElfError {
     #[error("can't open ELF file")]
     CantOpenElf,
@@ -30,11 +31,17 @@ pub enum ElfError {
     CouldntParse,
     #[error("couldn't find location in ELF file")]
     BadLocation,
+    #[error("io error")]
+    Io,
 }
 
 #[derive(Debug)]
-pub struct Elf {
+pub struct ExecutableFile {
     elf_file: object::File<'static, &'static [u8]>,
+    debug_info: DebugInfo<EndianSlice<'static, RunTimeEndian>>,
+    debug_abbrev: DebugAbbrev<EndianSlice<'static, RunTimeEndian>>,
+    debug_strings: DebugStr<EndianSlice<'static, RunTimeEndian>>,
+    debug_line: DebugLine<EndianSlice<'static, RunTimeEndian>>,
 }
 
 fn cache_file(path: &Path) -> io::Result<()> {
@@ -52,7 +59,7 @@ fn get_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
     (&*LOADED_FILES).read().unwrap().get(path).map(Arc::clone)
 }
 
-impl Elf {
+impl ExecutableFile {
     pub fn load(path: &Path) -> Result<Self, ElfError> {
         let file = cache_file(path).map_err(|e| {
             error!("Couldn't open {}: {}", path.display(), e);
@@ -66,7 +73,39 @@ impl Elf {
                 ElfError::CouldntParse
             })?;
 
-        Ok(Elf { elf_file })
+        let endian = if elf_file.is_little_endian() {
+            RunTimeEndian::Little
+        } else {
+            RunTimeEndian::Big
+        };
+        let io_err = |e| {
+            error!("IO error parsing section: {e}");
+            ElfError::Io
+        };
+
+        let debug_info = elf_file
+            .section_by_name(".debug_info")
+            .ok_or(ElfError::Io)?;
+        let debug_info = DebugInfo::new(debug_info.data().map_err(io_err)?, endian);
+        let debug_abbrev = elf_file
+            .section_by_name(".debug_abbrev")
+            .ok_or(ElfError::Io)?;
+        let debug_abbrev = DebugAbbrev::new(debug_abbrev.data().map_err(io_err)?, endian);
+        let debug_strings = elf_file.section_by_name(".debug_str").ok_or(ElfError::Io)?;
+        let debug_strings = DebugStr::new(debug_strings.data().map_err(io_err)?, endian);
+        let debug_line = elf_file
+            .section_by_name(".debug_line")
+            .ok_or(ElfError::Io)?;
+        let debug_line = DebugLine::new(debug_line.data().map_err(io_err)?, endian);
+        let base_addr = elf_file.section_by_name(".text").ok_or(ElfError::Io)?;
+
+        Ok(ExecutableFile {
+            elf_file,
+            debug_info,
+            debug_abbrev,
+            debug_strings,
+            debug_line,
+        })
     }
 
     pub fn get_address(&self, location: Location) -> Result<u64, ElfError> {
