@@ -1,5 +1,8 @@
 use crate::commands::Location;
-use gimli::{DebugAbbrev, DebugInfo, DebugLine, DebugStr, EndianSlice, RunTimeEndian};
+use gimli::{
+    DebugAbbrev, DebugInfo, DebugLine, DebugStr, DebuggingInformationEntry, EndianSlice,
+    RunTimeEndian, UnitHeader,
+};
 use object::{
     read::{ObjectSection, ReadCache, ReadRef},
     Object,
@@ -24,15 +27,15 @@ static LOADED_FILES: LazyLock<RwLock<HashMap<PathBuf, Arc<Vec<u8>>>>> =
     LazyLock::new(|| Default::default());
 
 #[derive(Debug, Error)]
-pub enum ElfError {
+pub enum ObjectError {
     #[error("can't open ELF file")]
     CantOpenElf,
     #[error("couldn't parse ELF file")]
     CouldntParse,
     #[error("couldn't find location in ELF file")]
     BadLocation,
-    #[error("io error")]
-    Io,
+    #[error("error when parsing DWARF tables")]
+    DwarfParsingFailed,
 }
 
 #[derive(Debug)]
@@ -60,17 +63,17 @@ fn get_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
 }
 
 impl ExecutableFile {
-    pub fn load(path: &Path) -> Result<Self, ElfError> {
+    pub fn load(path: &Path) -> Result<Self, ObjectError> {
         let file = cache_file(path).map_err(|e| {
             error!("Couldn't open {}: {}", path.display(), e);
-            ElfError::CantOpenElf
+            ObjectError::CantOpenElf
         })?;
 
         let data = get_bytes(path).unwrap();
         let elf_file = object::File::parse(unsafe { mem::transmute(data.as_ref().as_slice()) })
             .map_err(|e| {
                 error!("Couldn't parse elf file: {}", e);
-                ElfError::CouldntParse
+                ObjectError::CouldntParse
             })?;
 
         let endian = if elf_file.is_little_endian() {
@@ -80,24 +83,28 @@ impl ExecutableFile {
         };
         let io_err = |e| {
             error!("IO error parsing section: {e}");
-            ElfError::Io
+            ObjectError::DwarfParsingFailed
         };
 
         let debug_info = elf_file
             .section_by_name(".debug_info")
-            .ok_or(ElfError::Io)?;
+            .ok_or(ObjectError::DwarfParsingFailed)?;
         let debug_info = DebugInfo::new(debug_info.data().map_err(io_err)?, endian);
         let debug_abbrev = elf_file
             .section_by_name(".debug_abbrev")
-            .ok_or(ElfError::Io)?;
+            .ok_or(ObjectError::DwarfParsingFailed)?;
         let debug_abbrev = DebugAbbrev::new(debug_abbrev.data().map_err(io_err)?, endian);
-        let debug_strings = elf_file.section_by_name(".debug_str").ok_or(ElfError::Io)?;
+        let debug_strings = elf_file
+            .section_by_name(".debug_str")
+            .ok_or(ObjectError::DwarfParsingFailed)?;
         let debug_strings = DebugStr::new(debug_strings.data().map_err(io_err)?, endian);
         let debug_line = elf_file
             .section_by_name(".debug_line")
-            .ok_or(ElfError::Io)?;
+            .ok_or(ObjectError::DwarfParsingFailed)?;
         let debug_line = DebugLine::new(debug_line.data().map_err(io_err)?, endian);
-        let base_addr = elf_file.section_by_name(".text").ok_or(ElfError::Io)?;
+        let base_addr = elf_file
+            .section_by_name(".text")
+            .ok_or(ObjectError::DwarfParsingFailed)?;
 
         Ok(ExecutableFile {
             elf_file,
@@ -108,11 +115,71 @@ impl ExecutableFile {
         })
     }
 
-    pub fn get_address(&self, location: Location) -> Result<u64, ElfError> {
+    pub fn get_address(&self, location: Location) -> Result<u64, ObjectError> {
         match location {
             Location::Address(addr) => Ok(addr),
             Location::Line { file, line } => todo!(),
             Location::Function(fn_name) => todo!(),
         }
+    }
+
+    pub fn endianness(&self) -> RunTimeEndian {
+        if self.elf_file.is_little_endian() {
+            RunTimeEndian::Little
+        } else {
+            RunTimeEndian::Big
+        }
+    }
+
+    fn compile_unit_containing_address(
+        &self,
+        address: u64,
+    ) -> Result<Option<UnitHeader<EndianSlice<'static, RunTimeEndian>>>, ObjectError> {
+        let mut units = self.debug_info.units();
+        while let Ok(Some(unit)) = units.next() {}
+        todo!()
+    }
+
+    fn function_containing_address(
+        &self,
+        address: u64,
+    ) -> Result<
+        Option<DebuggingInformationEntry<'static, 'static, EndianSlice<'static, RunTimeEndian>>>,
+        ObjectError,
+    > {
+        let cu = match self.compile_unit_containing_address(address)? {
+            Some(cu) => cu,
+            None => return Ok(None),
+        };
+
+        todo!()
+    }
+
+    fn find_functions(
+        &self,
+        name: &str,
+    ) -> Result<
+        Vec<DebuggingInformationEntry<'static, 'static, EndianSlice<'static, RunTimeEndian>>>,
+        ObjectError,
+    > {
+        todo!()
+    }
+}
+
+// TODO could we be cheeky and load our test binary in the tests and look for the test functions
+// themselves!
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn doesnt_just_segfault() {
+        let path = env::current_exe().unwrap();
+
+        let file = ExecutableFile::load(&path).unwrap();
+
+        file.endianness();
+        assert!(file.elf_file.symbols().count() > 0);
     }
 }
