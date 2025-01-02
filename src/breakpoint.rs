@@ -7,56 +7,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static CURRENT_ID: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct ProcessInfo {
-    pub(crate) pid: Pid,
-    pub(crate) signal: Option<Signal>,
-}
-
-impl ProcessInfo {
-    fn new(pid: Pid, signal: Option<Signal>) -> Self {
-        Self { pid, signal }
-    }
-}
-
-impl From<Pid> for ProcessInfo {
-    fn from(pid: Pid) -> Self {
-        ProcessInfo::new(pid, None)
-    }
-}
-
-impl From<&Pid> for ProcessInfo {
-    fn from(pid: &Pid) -> Self {
-        ProcessInfo::new(*pid, None)
-    }
-}
-
-/// This enum represents a generic action for the process tracing API to take
-/// along with any form of ID or handle to the underlying thread or process
-/// i.e. a PID in Unix.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum TracerAction<T> {
-    /// Try continue is for times when you don't know if there is something
-    /// paused but if there is you want it to move on.
-    TryContinue(T),
-    Continue(T),
-    Step(T),
-    Detach(T),
-    Nothing,
-}
-
-impl<T> TracerAction<T> {
-    pub fn get_data(&self) -> Option<&T> {
-        match self {
-            TracerAction::Continue(d) => Some(d),
-            TracerAction::Step(d) => Some(d),
-            TracerAction::Detach(d) => Some(d),
-            TracerAction::TryContinue(d) => Some(d),
-            _ => None,
-        }
-    }
-}
-
 /// INT refers to the software interrupt instruction. For x64/x86 we use INT3 which is a
 /// one byte instruction defined for use by debuggers. For implementing support for other
 /// architectures the equivalent instructions will have to be found and also the architectures
@@ -135,11 +85,7 @@ impl Breakpoint {
     }
 
     /// Processes the breakpoint. This steps over the breakpoint
-    pub fn process(
-        &mut self,
-        pid: Pid,
-        reenable: bool,
-    ) -> Result<(bool, TracerAction<ProcessInfo>)> {
+    pub fn process(&mut self, pid: Pid, reenable: bool) -> Result<bool> {
         let is_running = match self.is_running.get(&pid) {
             Some(r) => *r,
             None => true,
@@ -148,14 +94,14 @@ impl Breakpoint {
             let _ = self.enable(pid);
             self.step(pid)?;
             self.is_running.insert(pid, false);
-            Ok((true, TracerAction::Step(pid.into())))
+            Ok(true)
         } else {
             self.disable(pid)?;
             if reenable {
                 self.enable(pid)?;
             }
             self.is_running.insert(pid, true);
-            Ok((false, TracerAction::Continue(pid.into())))
+            Ok(false)
         }
     }
 
