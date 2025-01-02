@@ -190,6 +190,7 @@ impl ExecutableFile {
                 // High is an offset from the base pc, therefore is u64 data.
                 let high_pc = match high_pc {
                     Ok(Some(AttributeValue::Udata(x))) => low_pc + x,
+                    Ok(Some(AttributeValue::Addr(x))) => x,
                     _ => 0u64,
                 };
                 if (low_pc..high_pc).contains(&address) {
