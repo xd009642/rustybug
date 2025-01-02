@@ -23,6 +23,10 @@ Pdf Page 330 book page number 298.
 
 ## Diary
 
+## 2025-01-02
+
+* Can find functions from names and addresses - also tests for this using `current_exe`
+
 ### 2025-01-01
 
 Milestone: New years day!
@@ -30,7 +34,6 @@ Milestone: New years day!
 * So I think I solved my elf file woes but we'll see...
 * Load and store DWARF sections and ELF file
 * Starting to do the methods around getting the compilation units and functions via addresses etc
-* Can find functions from names and addresses
 
 ### 2024-12-31
 
