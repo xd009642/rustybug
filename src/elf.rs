@@ -1,8 +1,5 @@
 use crate::commands::Location;
-use gimli::{
-    DebugAbbrev, DebugInfo, DebugLine, DebugStr, DebuggingInformationEntry, EndianSlice,
-    RunTimeEndian, UnitHeader,
-};
+use gimli::{DebuggingInformationEntry, Dwarf, EndianSlice, RunTimeEndian, Unit, UnitHeader, DwarfFileType};
 use object::{
     read::{ObjectSection, ReadCache, ReadRef},
     Object,
@@ -36,15 +33,16 @@ pub enum ObjectError {
     BadLocation,
     #[error("error when parsing DWARF tables")]
     DwarfParsingFailed,
+    #[error("missing {0}")]
+    SectionMissing(&'static str),
+    #[error("couldn't read data from {0}")]
+    CouldntReadSectionData(&'static str),
 }
 
 #[derive(Debug)]
 pub struct ExecutableFile {
     elf_file: object::File<'static, &'static [u8]>,
-    debug_info: DebugInfo<EndianSlice<'static, RunTimeEndian>>,
-    debug_abbrev: DebugAbbrev<EndianSlice<'static, RunTimeEndian>>,
-    debug_strings: DebugStr<EndianSlice<'static, RunTimeEndian>>,
-    debug_line: DebugLine<EndianSlice<'static, RunTimeEndian>>,
+    dwarf: Dwarf<EndianSlice<'static, RunTimeEndian>>,
 }
 
 fn cache_file(path: &Path) -> io::Result<()> {
@@ -60,6 +58,21 @@ fn cache_file(path: &Path) -> io::Result<()> {
 
 fn get_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
     (&*LOADED_FILES).read().unwrap().get(path).map(Arc::clone)
+}
+
+fn get_file_section_reader(
+    section_id: gimli::SectionId,
+    endian: RunTimeEndian,
+    object: &object::File<'static, &'static [u8]>,
+) -> Result<EndianSlice<'static, RunTimeEndian>, ObjectError> {
+    let data = object
+        .section_by_name(section_id.name())
+        .ok_or(ObjectError::SectionMissing(section_id.name()))?;
+    let data = data.data().map_err(|e| {
+        error!("Couldn't access section data {}", e);
+        ObjectError::CouldntReadSectionData(section_id.name())
+    })?;
+    Ok(EndianSlice::new(data, endian))
 }
 
 impl ExecutableFile {
@@ -81,38 +94,13 @@ impl ExecutableFile {
         } else {
             RunTimeEndian::Big
         };
-        let io_err = |e| {
-            error!("IO error parsing section: {e}");
-            ObjectError::DwarfParsingFailed
-        };
 
-        let debug_info = elf_file
-            .section_by_name(".debug_info")
-            .ok_or(ObjectError::DwarfParsingFailed)?;
-        let debug_info = DebugInfo::new(debug_info.data().map_err(io_err)?, endian);
-        let debug_abbrev = elf_file
-            .section_by_name(".debug_abbrev")
-            .ok_or(ObjectError::DwarfParsingFailed)?;
-        let debug_abbrev = DebugAbbrev::new(debug_abbrev.data().map_err(io_err)?, endian);
-        let debug_strings = elf_file
-            .section_by_name(".debug_str")
-            .ok_or(ObjectError::DwarfParsingFailed)?;
-        let debug_strings = DebugStr::new(debug_strings.data().map_err(io_err)?, endian);
-        let debug_line = elf_file
-            .section_by_name(".debug_line")
-            .ok_or(ObjectError::DwarfParsingFailed)?;
-        let debug_line = DebugLine::new(debug_line.data().map_err(io_err)?, endian);
-        let base_addr = elf_file
-            .section_by_name(".text")
-            .ok_or(ObjectError::DwarfParsingFailed)?;
+        let loader =
+            |section: gimli::SectionId| get_file_section_reader(section, endian, &elf_file);
+        let mut dwarf = gimli::Dwarf::load(loader)?;
+        dwarf.file_type = DwarfFileType::Main;
 
-        Ok(ExecutableFile {
-            elf_file,
-            debug_info,
-            debug_abbrev,
-            debug_strings,
-            debug_line,
-        })
+        Ok(ExecutableFile { elf_file, dwarf })
     }
 
     pub fn get_address(&self, location: Location) -> Result<u64, ObjectError> {
@@ -134,10 +122,25 @@ impl ExecutableFile {
     fn compile_unit_containing_address(
         &self,
         address: u64,
-    ) -> Result<Option<UnitHeader<EndianSlice<'static, RunTimeEndian>>>, ObjectError> {
-        let mut units = self.debug_info.units();
-        while let Ok(Some(unit)) = units.next() {}
-        todo!()
+    ) -> Option<Unit<EndianSlice<'static, RunTimeEndian>>> {
+        let mut units = self.dwarf.units();
+        while let Ok(Some(header)) = units.next() {
+            if let Ok(unit) = self.dwarf.unit(header) {
+                let mut ranges = match self.dwarf.unit_ranges(&unit) {
+                    Ok(ranges) => ranges,
+                    Err(e) => {
+                        error!("Couldn't get debug ranges for unit: {}", e);
+                        continue;
+                    }
+                };
+                while let Ok(Some(r)) = ranges.next() {
+                    if (r.begin..r.end).contains(&address) {
+                        return Some(unit);
+                    };
+                }
+            }
+        }
+        None
     }
 
     fn function_containing_address(

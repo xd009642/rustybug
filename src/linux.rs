@@ -87,6 +87,10 @@ pub fn execute(test: &Path, argv: &[String], envar: &[(String, String)]) -> anyh
 
     let arg_ref = argv.iter().map(AsRef::as_ref).collect::<Vec<&CStr>>();
     let env_ref = envar.iter().map(AsRef::as_ref).collect::<Vec<&CStr>>();
+
+    // TODO if I wanted to be _extra_ try hard for tarpaulin I'd see if I could manually trigger a
+    // saving of a profraw file here before execve!
+
     execve(&program, &arg_ref, &env_ref)?;
 
     unreachable!();
