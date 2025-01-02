@@ -30,6 +30,7 @@ Milestone: New years day!
 * So I think I solved my elf file woes but we'll see...
 * Load and store DWARF sections and ELF file
 * Starting to do the methods around getting the compilation units and functions via addresses etc
+* Can find functions from names and addresses
 
 ### 2024-12-31
 

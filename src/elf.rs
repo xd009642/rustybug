@@ -189,7 +189,7 @@ impl ExecutableFile {
                 };
                 // High is an offset from the base pc, therefore is u64 data.
                 let high_pc = match high_pc {
-                    Ok(Some(AttributeValue::Udata(x))) => x,
+                    Ok(Some(AttributeValue::Udata(x))) => low_pc + x,
                     _ => 0u64,
                 };
                 if (low_pc..high_pc).contains(&address) {
@@ -204,12 +204,47 @@ impl ExecutableFile {
     fn find_functions(
         &self,
         name: &str,
-    ) -> Result<
-        Vec<DebuggingInformationEntry<'static, 'static, EndianSlice<'static, RunTimeEndian>>>,
-        ObjectError,
-    > {
-        todo!()
+    ) -> Result<Vec<(Unit<EndianSlice<'static, RunTimeEndian>>, UnitOffset)>, ObjectError> {
+        let mut result = vec![];
+        let mut units = self.dwarf.units();
+        while let Ok(Some(header)) = units.next() {
+            if let Ok(unit) = self.dwarf.unit(header) {
+                let mut cursor = unit.entries();
+                while let Some((delta_depth, current)) = cursor
+                    .next_dfs()
+                    .map_err(|_| ObjectError::FailedToParseDieTree)?
+                {
+                    if current.tag() == gimli::DW_TAG_subprogram {
+                        let fn_name = match current.attr_value(gimli::DW_AT_name) {
+                            Ok(name) => name,
+                            Err(_) => continue,
+                        };
+
+                        let fn_name: Option<String> = match fn_name {
+                            Some(AttributeValue::DebugStrRef(offset)) => self
+                                .dwarf
+                                .string(offset)
+                                .and_then(|r| r.to_string().map(|s| s.to_string()))
+                                .ok(),
+                            _ => None,
+                        };
+                        if let Some(fn_name) = fn_name {
+                            if name_matches(name, &fn_name) {
+                                let offset = current.offset();
+                                result.push((self.dwarf.unit(header).unwrap(), offset));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(result)
     }
+}
+
+fn name_matches(name: &str, compiled_name: &str) -> bool {
+    // no demangling... yet
+    name == compiled_name || rustc_demangle::demangle(compiled_name).as_str() == name
 }
 
 // TODO could we be cheeky and load our test binary in the tests and look for the test functions
@@ -227,5 +262,31 @@ mod tests {
 
         file.endianness();
         assert!(file.elf_file.symbols().count() > 0);
+    }
+
+    #[test]
+    fn can_find_functions() {
+        let path = env::current_exe().unwrap();
+        let file = ExecutableFile::load(&path).unwrap();
+
+        let v = file.find_functions("can_find_functions").unwrap();
+        assert!(!v.is_empty());
+
+        let (unit, offset) = &v[0];
+
+        let die = unit.entry(*offset).unwrap();
+        let low_pc = die.attr_value(gimli::DW_AT_low_pc);
+        let low_pc = match low_pc {
+            Ok(Some(AttributeValue::Addr(x))) => x,
+            _ => panic!("No low_pc"),
+        };
+
+        let (unit_lookup, offset_lookup) = file
+            .function_containing_address(low_pc + 4)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(unit_lookup.header, unit.header);
+        assert_eq!(offset_lookup, *offset);
     }
 }
