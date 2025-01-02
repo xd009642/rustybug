@@ -20,6 +20,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.version }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
       - name: coverage
-        run: cargo run --release -- tarpaulin --engine llvm --coveralls ${{ secrets.COVERALLS_TOKEN }} 
+        run: cargo tarpaulin --engine llvm --coveralls ${{ secrets.COVERALLS_TOKEN }} 
 
