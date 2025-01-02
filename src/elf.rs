@@ -1,5 +1,8 @@
 use crate::commands::Location;
-use gimli::{DebuggingInformationEntry, Dwarf, EndianSlice, RunTimeEndian, Unit, UnitHeader, DwarfFileType};
+use gimli::{
+    AttributeValue, DebuggingInformationEntry, Dwarf, DwarfFileType, EndianSlice, RunTimeEndian,
+    Unit, UnitHeader, UnitOffset,
+};
 use object::{
     read::{ObjectSection, ReadCache, ReadRef},
     Object,
@@ -37,6 +40,8 @@ pub enum ObjectError {
     SectionMissing(&'static str),
     #[error("couldn't read data from {0}")]
     CouldntReadSectionData(&'static str),
+    #[error("failed to parse debug information tree")]
+    FailedToParseDieTree,
 }
 
 #[derive(Debug)]
@@ -143,19 +148,41 @@ impl ExecutableFile {
         None
     }
 
-    fn function_containing_address(
+    fn function_containing_address<'a>(
         &self,
         address: u64,
-    ) -> Result<
-        Option<DebuggingInformationEntry<'static, 'static, EndianSlice<'static, RunTimeEndian>>>,
-        ObjectError,
-    > {
-        let cu = match self.compile_unit_containing_address(address)? {
+    ) -> Result<Option<(Unit<EndianSlice<'static, RunTimeEndian>>, UnitOffset)>, ObjectError> {
+        let cu = match self.compile_unit_containing_address(address) {
             Some(cu) => cu,
             None => return Ok(None),
         };
 
-        todo!()
+        let mut cursor = cu.entries();
+
+        while let Some((delta_depth, current)) = cursor
+            .next_dfs()
+            .map_err(|_| ObjectError::FailedToParseDieTree)?
+        {
+            if current.tag() == gimli::DW_TAG_subprogram {
+                // I am a function!
+                let low_pc = current.attr_value(gimli::DW_AT_low_pc);
+                let high_pc = current.attr_value(gimli::DW_AT_high_pc);
+                let low_pc = match low_pc {
+                    Ok(Some(AttributeValue::Addr(x))) => x,
+                    _ => 0u64,
+                };
+                // High is an offset from the base pc, therefore is u64 data.
+                let high_pc = match high_pc {
+                    Ok(Some(AttributeValue::Udata(x))) => x,
+                    _ => 0u64,
+                };
+                if (low_pc..high_pc).contains(&address) {
+                    let offset = current.offset();
+                    return Ok(Some((cu, offset)));
+                }
+            }
+        }
+        Ok(None)
     }
 
     fn find_functions(
