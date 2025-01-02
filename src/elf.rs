@@ -65,7 +65,7 @@ fn get_bytes(path: &Path) -> Option<Arc<Vec<u8>>> {
     (&*LOADED_FILES).read().unwrap().get(path).map(Arc::clone)
 }
 
-fn get_file_section_reader(
+fn try_get_file_section_reader(
     section_id: gimli::SectionId,
     endian: RunTimeEndian,
     object: &object::File<'static, &'static [u8]>,
@@ -78,6 +78,22 @@ fn get_file_section_reader(
         ObjectError::CouldntReadSectionData(section_id.name())
     })?;
     Ok(EndianSlice::new(data, endian))
+}
+
+fn get_file_section_reader(
+    section_id: gimli::SectionId,
+    endian: RunTimeEndian,
+    object: &object::File<'static, &'static [u8]>,
+) -> Result<EndianSlice<'static, RunTimeEndian>, ObjectError> {
+    if let Ok(section) = try_get_file_section_reader(section_id, endian, object) {
+        Ok(section)
+    } else {
+        warn!(
+            "Couldn't get {}, replacing with empty buffer",
+            section_id.name()
+        );
+        Ok(EndianSlice::new(&[], endian))
+    }
 }
 
 impl ExecutableFile {
