@@ -24,3 +24,6 @@ tui-logger = { version = "0.14.1", features = ["crossterm", "tracing-support"] }
 [dev-dependencies]
 rusty-fork = "0.3.0"
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
