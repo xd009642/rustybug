@@ -200,7 +200,6 @@ impl Process {
 
     pub fn pc(&self) -> Result<u64, ProcessError> {
         current_instruction_pointer(self.pid)
-            // .map(|x| (x as u64) - self.addr_offset)
             .map(|x| x as u64)
             .map_err(|e| {
                 error!("Couldn't read PC register: {}", e);
@@ -266,7 +265,12 @@ impl Process {
     }
 
     pub fn set_breakpoint(&mut self, addr: u64) -> Result<u64, ProcessError> {
-        let bp = Breakpoint::new(self.pid, addr /* + self.addr_offset */).map_err(|e| {
+        info!(
+            "Setting breakpoint at 0x{:x} (corrected 0x{:x})",
+            addr,
+            addr + self.addr_offset
+        );
+        let bp = Breakpoint::new(self.pid, addr + self.addr_offset).map_err(|e| {
             error!("Failed to set breakpoint: {}", e);
             ProcessError::BreakpointSetFailed
         })?;
