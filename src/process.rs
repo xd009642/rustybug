@@ -227,6 +227,9 @@ impl Process {
             continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
         } else {
             bps[0]
+                .jump_to(self.pid)
+                .map_err(|_| ProcessError::ContinueFailed)?;
+            bps[0]
                 .process(self.pid, true)
                 .map_err(|_| ProcessError::ContinueFailed)?;
             continue_exec(self.pid, None).map_err(|_| ProcessError::ContinueFailed)?;
@@ -270,7 +273,7 @@ impl Process {
             addr,
             addr + self.addr_offset
         );
-        let bp = Breakpoint::new(self.pid, addr + self.addr_offset).map_err(|e| {
+        let bp = Breakpoint::new(self.pid, addr /*+ self.addr_offset*/).map_err(|e| {
             error!("Failed to set breakpoint: {}", e);
             ProcessError::BreakpointSetFailed
         })?;

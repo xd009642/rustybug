@@ -55,7 +55,7 @@ impl Breakpoint {
     }
 
     pub fn has_hit(&self, pid: Pid) -> Result<bool> {
-        let pc = current_instruction_pointer(pid)?;
+        let pc = current_instruction_pointer(pid)? - 1;
         Ok(align_address(pc as u64) == self.pc)
     }
 
