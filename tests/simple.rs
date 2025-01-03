@@ -167,6 +167,8 @@ rusty_fork_test! {
         };
         let mut sm = DebuggerStateMachine::start(args).unwrap();
 
+        assert!(sm.set_break(&Location::Function("imaginary-function-doesn't-exist".to_string())).is_err());
+
         sm.set_break(&Location::Function("main".to_string())).unwrap();
 
         sm.cont();
