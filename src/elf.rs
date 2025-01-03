@@ -202,7 +202,7 @@ impl ExecutableFile {
         Ok(None)
     }
 
-    fn find_functions(
+    pub fn find_functions(
         &self,
         name: &str,
     ) -> Result<Vec<(Unit<EndianSlice<'static, RunTimeEndian>>, UnitOffset)>, ObjectError> {

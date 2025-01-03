@@ -1,9 +1,11 @@
 use crate::commands::Location;
 use crate::elf::ExecutableFile;
 use crate::process::{Process, Registers, StopReason};
+use anyhow::Context;
 use clap::Parser;
 use nix::unistd::Pid;
 use std::path::PathBuf;
+use std::time::Duration;
 use tracing::{debug, info, warn};
 
 pub use crate::process::State;
@@ -80,6 +82,10 @@ impl DebuggerStateMachine {
         Ok(Self { root, elf, args })
     }
 
+    pub fn blocking_wait(&mut self, duration: Duration) -> anyhow::Result<StopReason> {
+        Ok(self.root.blocking_wait_on_signal(duration)?)
+    }
+
     pub fn wait(&mut self) -> anyhow::Result<Option<StopReason>> {
         Ok(self.root.wait_on_signal()?)
     }
@@ -119,7 +125,23 @@ impl DebuggerStateMachine {
                 anyhow::bail!("Need to implement file+line breakpoint setting")
             }
             Location::Function(fn_name) => {
-                anyhow::bail!("Need to implement breakpoints on function names")
+                if let Some(elf) = self.elf.as_ref() {
+                    let functions = elf.find_functions(&fn_name)?;
+
+                    for (unit, offset) in &functions {
+                        let die = unit.entry(*offset)?;
+                        let low_pc = die.attr_value(gimli::DW_AT_low_pc);
+                        let low_pc = match low_pc {
+                            Ok(Some(gimli::AttributeValue::Addr(x))) => x,
+                            _ => continue,
+                        };
+                        let id = self.root.set_breakpoint(low_pc)?;
+                        return Ok(id);
+                    }
+                    anyhow::bail!("No function found we could attach a breakpoint to");
+                } else {
+                    anyhow::bail!("No elf file loaded");
+                }
             }
         }
     }

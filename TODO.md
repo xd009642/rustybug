@@ -23,6 +23,10 @@ Pdf Page 369 book page number 337.
 
 ## Diary
 
+## 2025-01-03
+
+* I can set breakpoints on functions (according to tests)
+
 ## 2025-01-02
 
 * Can find functions from names and addresses - also tests for this using `current_exe`

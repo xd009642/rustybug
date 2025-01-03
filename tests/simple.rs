@@ -1,7 +1,9 @@
 //! In these tests we'll just run a program setting no breakpoints.
+use nix::sys::signal::Signal;
 use rusty_fork::rusty_fork_test;
+use rustybug::commands::Location;
 use rustybug::{
-    process::{Event, Info, Process, ProcessError},
+    process::{Event, Info, Process, ProcessError, TrapType},
     Args, DebuggerStateMachine, State,
 };
 use std::path::Path;
@@ -154,5 +156,26 @@ rusty_fork_test! {
         proc.stop().unwrap();
 
         assert!(proc.blocking_wait_on_signal(Duration::from_secs(1)).is_ok());
+    }
+
+    #[test]
+    #[traced_test]
+    fn breakpoint_on_function() {
+        let args = Args {
+            input: Some("tests/data/apps/build/test_project".into()),
+            pid: None,
+        };
+        let mut sm = DebuggerStateMachine::start(args).unwrap();
+
+        sm.set_break(&Location::Function("main".to_string())).unwrap();
+
+        sm.cont();
+
+        let reason = sm.blocking_wait(Duration::from_secs(5)).unwrap();
+
+        assert_eq!(reason.trap_reason, Some(TrapType::SoftwareBreak));
+        assert_eq!(reason.info, Info::Signalled(Signal::SIGTRAP));
+        assert_eq!(reason.reason, State::Stopped);
+        assert_eq!(reason.event, None);
     }
 }
