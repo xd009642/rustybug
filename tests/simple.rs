@@ -179,5 +179,7 @@ rusty_fork_test! {
         assert_eq!(reason.info, Info::Signalled(Signal::SIGTRAP));
         assert_eq!(reason.reason, State::Stopped);
         assert_eq!(reason.event, None);
+
+
     }
 }
