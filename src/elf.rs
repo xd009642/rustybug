@@ -32,6 +32,8 @@ pub enum ObjectError {
     CantOpenElf,
     #[error("couldn't parse ELF file")]
     CouldntParse,
+    #[error("elf file has no text section")]
+    NoTextSection,
     #[error("couldn't find location in ELF file")]
     BadLocation,
     #[error("error when parsing DWARF tables")]
@@ -122,6 +124,10 @@ impl ExecutableFile {
         dwarf.file_type = DwarfFileType::Main;
 
         Ok(ExecutableFile { elf_file, dwarf })
+    }
+
+    pub fn entry_address(&self) -> u64 {
+        self.elf_file.entry()
     }
 
     pub fn get_address(&self, location: Location) -> Result<u64, ObjectError> {

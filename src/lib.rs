@@ -77,6 +77,10 @@ impl DebuggerStateMachine {
 
         info!(pid=?root.pid(), "program launch.");
 
+        let old = root.addr_offset;
+        root.addr_offset = root.addr_offset - elf.as_ref().map(|x| x.entry_address()).unwrap_or_default();
+        info!("Used entry addr to correct offset from {} to {}", old, root.addr_offset);
+
         debug!(process=?root);
 
         Ok(Self { root, elf, args })

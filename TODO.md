@@ -20,6 +20,7 @@ Pdf Page 369 book page number 337.
 * Fix whatever is wrong with my offsetting...
 * Better API around siginfo in https://github.com/nix-rust/nix 
 * memory mapped ELF files to avoid loading a bunch of big executables when not a lot of them might be parsed
+* Get section load bias needs fixing
 
 ## Diary
 

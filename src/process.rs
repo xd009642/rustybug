@@ -129,7 +129,7 @@ pub enum ProcessError {
 pub struct Process {
     pid: Pid,
     stdout_reader: Option<OwnedFd>,
-    addr_offset: u64,
+    pub addr_offset: u64,
     terminate_on_end: bool,
     state: State,
     breakpoints: Vec<Breakpoint>,
@@ -273,7 +273,7 @@ impl Process {
             addr,
             addr + self.addr_offset
         );
-        let bp = Breakpoint::new(self.pid, addr /*+ self.addr_offset*/).map_err(|e| {
+        let bp = Breakpoint::new(self.pid, addr + self.addr_offset).map_err(|e| {
             error!("Failed to set breakpoint: {}", e);
             ProcessError::BreakpointSetFailed
         })?;
@@ -453,7 +453,13 @@ impl Drop for Process {
 fn get_addr_offset(pid: Pid) -> u64 {
     if let Ok(proc) = PfsProcess::new(pid.as_raw()) {
         let exe = proc.exe().ok();
+        if let Ok(auxv) = proc.auxv() {
+            if let Some(entry) = auxv.get(&libc::AT_ENTRY) {
+                return *entry;
+            }
+        }
         if let Ok(maps) = proc.maps() {
+            println!("{:?}", maps);
             let offset_info = maps.iter().find(|x| match (&x.pathname, exe.as_ref()) {
                 (MMapPath::Path(p), Some(e)) => p == e,
                 (MMapPath::Path(_), None) => true,
