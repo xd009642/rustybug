@@ -1,5 +1,4 @@
 use crate::ptrace_control::*;
-use nix::sys::signal::Signal;
 use nix::unistd::Pid;
 use nix::{Error, Result};
 use std::collections::HashMap;
@@ -55,8 +54,8 @@ impl Breakpoint {
     }
 
     pub fn has_hit(&self, pid: Pid) -> Result<bool> {
-        let pc = current_instruction_pointer(pid)? - 1;
-        Ok(align_address(pc as u64) == self.pc)
+        let pc = current_instruction_pointer(pid)? as u64;
+        Ok(pc == self.pc || pc - 1 == self.pc)
     }
 
     pub fn jump_to(&mut self, pid: Pid) -> Result<()> {

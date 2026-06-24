@@ -1,7 +1,6 @@
 use crate::commands::Location;
 use crate::elf::ExecutableFile;
 use crate::process::{Process, Registers, StopReason};
-use anyhow::Context;
 use clap::Parser;
 use nix::unistd::Pid;
 use std::path::PathBuf;
@@ -77,13 +76,10 @@ impl DebuggerStateMachine {
 
         info!(pid=?root.pid(), "program launch.");
 
-        let old = root.addr_offset;
-        root.addr_offset =
-            root.addr_offset - elf.as_ref().map(|x| x.entry_address()).unwrap_or_default();
-        info!(
-            "Used entry addr to correct offset from {} to {}",
-            old, root.addr_offset
-        );
+        if let (Some(elf), Some(mapped_address)) = (elf.as_ref(), root.mapped_address()) {
+            root.addr_offset = elf.runtime_address_offset(mapped_address);
+            info!("Using runtime address offset 0x{:x}", root.addr_offset);
+        }
 
         debug!(process=?root);
 
@@ -143,7 +139,7 @@ impl DebuggerStateMachine {
                             Ok(Some(gimli::AttributeValue::Addr(x))) => x,
                             _ => continue,
                         };
-                        let id = self.root.set_breakpoint(low_pc)?;
+                        let id = self.root.set_breakpoint(low_pc + self.root.addr_offset)?;
                         return Ok(id);
                     }
                     anyhow::bail!("No function found we could attach a breakpoint to");

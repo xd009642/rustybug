@@ -151,12 +151,10 @@ impl Process {
             info!("No handle to process stdout returned");
         }
 
-        let addr_offset = get_addr_offset(pid);
-
         let mut ret = Self {
             pid,
             stdout_reader,
-            addr_offset,
+            addr_offset: 0,
             terminate_on_end: true,
             state: State::Stopped,
             breakpoints: vec![],
@@ -174,12 +172,10 @@ impl Process {
             ProcessError::AttachFailed
         })?;
 
-        let addr_offset = get_addr_offset(pid);
-
         let mut ret = Self {
             pid,
             stdout_reader: None,
-            addr_offset,
+            addr_offset: 0,
             terminate_on_end: false,
             state: State::Stopped,
             breakpoints: vec![],
@@ -263,17 +259,22 @@ impl Process {
         self.pid
     }
 
+    pub fn mapped_address(&self) -> Option<u64> {
+        let proc = PfsProcess::new(self.pid.as_raw()).ok()?;
+        let exe = proc.exe().ok()?;
+        let maps = proc.maps().ok()?;
+        maps.iter()
+            .find(|map| matches!(&map.pathname, MMapPath::Path(path) if path == &exe))
+            .map(|map| map.address.0)
+    }
+
     pub fn state(&self) -> State {
         self.state
     }
 
     pub fn set_breakpoint(&mut self, addr: u64) -> Result<u64, ProcessError> {
-        info!(
-            "Setting breakpoint at 0x{:x} (corrected 0x{:x})",
-            addr,
-            addr + self.addr_offset
-        );
-        let bp = Breakpoint::new(self.pid, addr + self.addr_offset).map_err(|e| {
+        info!("Setting breakpoint at 0x{:x}", addr);
+        let bp = Breakpoint::new(self.pid, addr).map_err(|e| {
             error!("Failed to set breakpoint: {}", e);
             ProcessError::BreakpointSetFailed
         })?;
@@ -447,33 +448,5 @@ impl Drop for Process {
                 }
             }
         }
-    }
-}
-
-fn get_addr_offset(pid: Pid) -> u64 {
-    if let Ok(proc) = PfsProcess::new(pid.as_raw()) {
-        let exe = proc.exe().ok();
-        if let Ok(auxv) = proc.auxv() {
-            if let Some(entry) = auxv.get(&libc::AT_ENTRY) {
-                return *entry;
-            }
-        }
-        if let Ok(maps) = proc.maps() {
-            println!("{:?}", maps);
-            let offset_info = maps.iter().find(|x| match (&x.pathname, exe.as_ref()) {
-                (MMapPath::Path(p), Some(e)) => p == e,
-                (MMapPath::Path(_), None) => true,
-                _ => false,
-            });
-            if let Some(first) = offset_info {
-                first.address.0
-            } else {
-                0
-            }
-        } else {
-            0
-        }
-    } else {
-        0
     }
 }

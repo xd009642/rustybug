@@ -5,7 +5,7 @@ use gimli::{
 };
 use object::{
     read::{ObjectSection, ReadCache, ReadRef},
-    Object,
+    Object, ObjectKind, ObjectSegment,
 };
 use rustc_demangle::demangle;
 use std::collections::{HashMap, HashSet};
@@ -126,8 +126,21 @@ impl ExecutableFile {
         Ok(ExecutableFile { elf_file, dwarf })
     }
 
-    pub fn entry_address(&self) -> u64 {
-        self.elf_file.entry()
+    pub fn runtime_address_offset(&self, mapped_address: u64) -> u64 {
+        match self.elf_file.kind() {
+            ObjectKind::Dynamic => {
+                let min_segment_address = self
+                    .elf_file
+                    .segments()
+                    .filter(|segment| segment.size() > 0)
+                    .map(|segment| segment.address())
+                    .min()
+                    .unwrap_or_default();
+
+                mapped_address - min_segment_address
+            }
+            _ => 0,
+        }
     }
 
     pub fn get_address(&self, location: Location) -> Result<u64, ObjectError> {
